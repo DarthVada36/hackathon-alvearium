@@ -47,13 +47,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const updateUserProfile = (profileData) => {
+    if (user) {
+      const updatedUser = { ...user, ...profileData };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    }
+  };
+
   const value = {
     user,
     isAuthenticated,
     login,
     logout,
     register,
-    updateUserPoints
+    updateUserPoints,
+    updateUserProfile
   };
 
   return (

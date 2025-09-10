@@ -21,10 +21,34 @@ import {
   FiInfo
 } from 'react-icons/fi';
 
+// Importar avatares
+import icon1 from '../assets/img/icon1png.png';
+import icon2 from '../assets/img/icon2.png';
+import icon3 from '../assets/img/icon3.png';
+import icon4 from '../assets/img/icon4.png';
+import icon5 from '../assets/img/icon5.png';
+import icon6 from '../assets/img/icon6.png';
+
 const Dashboard = () => {
   const { user } = useAuth();
   const [showLevelUpAnimation, setShowLevelUpAnimation] = useState(false);
   const [rutaProgress, setRutaProgress] = useState(35); // Progreso de la ruta actual
+
+  // Available avatars
+  const avatars = [
+    { id: 'icon1', src: icon1, name: 'Ratoncito Clásico' },
+    { id: 'icon2', src: icon2, name: 'Ratoncito Aventurero' },
+    { id: 'icon3', src: icon3, name: 'Ratoncito Explorador' },
+    { id: 'icon4', src: icon4, name: 'Ratoncito Real' },
+    { id: 'icon5', src: icon5, name: 'Ratoncito Mágico' },
+    { id: 'icon6', src: icon6, name: 'Ratoncito Maestro' }
+  ];
+
+  // Get user's selected avatar
+  const getUserAvatar = () => {
+    const userAvatar = avatars.find(avatar => avatar.id === user?.avatar);
+    return userAvatar ? userAvatar.src : icon1; // Default to icon1 if no avatar selected
+  };
 
   // Animación de entrada
   useEffect(() => {
@@ -131,8 +155,12 @@ const Dashboard = () => {
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full flex items-center justify-center shadow-lg animate-bounce">
-                <span className="text-2xl">🐭</span>
+              <div className="w-12 h-12 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full flex items-center justify-center shadow-lg overflow-hidden border-2 border-amber-300">
+                <img 
+                  src={getUserAvatar()} 
+                  alt="Avatar del usuario" 
+                  className="w-12 h-12 object-cover"
+                />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-800">¡Hola, {user?.name}!</h1>
@@ -404,44 +432,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Menú de Navegación Original */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-        <div className="container mx-auto px-4">
-          <div className="flex justify-around items-center py-2">
-            <Link to="/dashboard" className="flex flex-col items-center p-2">
-              <div className="p-2 rounded-lg bg-amber-100">
-                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-              </div>
-              <span className="text-xs mt-1 text-amber-600 font-medium">Inicio</span>
-            </Link>
-            
-            <Link to="/gymkana" className="flex flex-col items-center p-2">
-              <div className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <FiMap className="w-6 h-6 text-gray-600" />
-              </div>
-              <span className="text-xs mt-1 text-gray-600">Ruta</span>
-            </Link>
-            
-            <Link to="/chat" className="flex flex-col items-center p-2">
-              <div className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <FiMessageCircle className="w-6 h-6 text-gray-600" />
-              </div>
-              <span className="text-xs mt-1 text-gray-600">Chat</span>
-            </Link>
-            
-            <Link to="/profile" className="flex flex-col items-center p-2">
-              <div className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <span className="text-xs mt-1 text-gray-600">Perfil</span>
-            </Link>
-          </div>
-        </div>
-      </div>
+      <Navigation />
     </div>
   );
 };

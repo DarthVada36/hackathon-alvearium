@@ -51,7 +51,7 @@ const ChatBot = () => {
     }
     
     if (lowerMessage.includes('cerca') || lowerMessage.includes('ubicación')) {
-      return "Para ayudarte mejor con lugares cercanos, necesito que actives tu geolocalización en la sección de Gymkana 📍. Desde allí podré guiarte a los sitios más interesantes según donde estés. ¡Te esperan muchas sorpresas!";
+      return "Para ayudarte mejor con lugares cercanos, necesito que actives tu geolocalización en la sección de Ruta 📍. Desde allí podré guiarte a los sitios más interesantes según donde estés. ¡Te esperan muchas sorpresas!";
     }
     
     if (lowerMessage.includes('historia') && lowerMessage.includes('madrid')) {
@@ -70,8 +70,8 @@ const ChatBot = () => {
       return "¡De nada! 😊 Es un placer ser tu guía por Madrid. Recuerda que puedes preguntarme cualquier cosa sobre la ciudad. ¡Que disfrutes tu aventura madrileña!";
     }
     
-    if (lowerMessage.includes('puntos') || lowerMessage.includes('gymkana')) {
-      return `¡Genial que preguntes sobre los puntos! ⭐ Actualmente tienes ${user?.points || 0} puntos. Para ganar más, visita los lugares oficiales de mi ruta en la sección Gymkana. ¡Cada lugar te dará entre 10 y 50 puntos dependiendo de su importancia histórica!`;
+    if (lowerMessage.includes('puntos') || lowerMessage.includes('ruta')) {
+      return `¡Genial que preguntes sobre los puntos! ⭐ Actualmente tienes ${user?.points || 0} puntos. Para ganar más, visita los lugares oficiales de mi ruta en la sección Ruta. ¡Cada lugar te dará entre 10 y 50 puntos dependiendo de su importancia histórica!`;
     }
     
     // Respuesta por defecto
