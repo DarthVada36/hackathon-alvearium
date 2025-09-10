@@ -11,6 +11,13 @@ groq==0.14.0
 python-dotenv==1.0.1
 pydantic-settings==2.8.1
 
+# API & Server
+fastapi==0.95.0
+uvicorn==0.21.1
+
+# Database
+psycopg2-binary==2.9.5
+
 # Vector DB & Embeddings
 pinecone==4.1.0
 sentence-transformers==2.2.2
