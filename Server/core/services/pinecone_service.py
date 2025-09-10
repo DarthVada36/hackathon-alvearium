@@ -11,22 +11,22 @@ import logging
 try:
     import pinecone
 except ImportError:
-    pinecone = None  # For environments without pinecone installed
+    pinecone = None
 
-# Optional FAISS fallback
+
 try:
     import faiss
 except ImportError:
     faiss = None
 
-# Embedding model
+
 try:
     from sentence_transformers import SentenceTransformer
     _embedder = SentenceTransformer("all-MiniLM-L6-v2")
 except ImportError:
     _embedder = None
 
-# Add root to path for config import
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 try:
     from config import pinecone_settings
@@ -48,7 +48,20 @@ class PineconeService:
         self._use_faiss = False
         self._faiss_index = None
         self._faiss_metadata = {}
+        self.embedding_model = _embedder
         self._init_pinecone()
+
+    def embed_text(self, text: str) -> List[float]:
+        """Embed a single text string into a vector"""
+        if not self.embedding_model:
+            raise RuntimeError("Embedding model not loaded")
+        return self.embedding_model.encode(text).tolist()
+    
+    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+        """Embed multiple text strings into vectors"""
+        if not self.embedding_model:
+            raise RuntimeError("Embedding model not loaded")
+        return self.embedding_model.encode(texts).tolist()
 
     def _init_pinecone(self):
         """Initializes Pinecone client and index or fallback to FAISS"""

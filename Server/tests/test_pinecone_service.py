@@ -25,7 +25,6 @@ def test_upsert_and_query():
         for i, (vec, txt) in enumerate(zip(vecs, SAMPLE_TEXTS))
     ])
     assert upserted is not None
-    # Query for first text
     results = pinecone_service.query(vecs[0], top_k=2)
     assert isinstance(results, list)
     assert len(results) > 0

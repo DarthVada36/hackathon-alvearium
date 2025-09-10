@@ -11,8 +11,16 @@ groq==0.14.0
 python-dotenv==1.0.1
 pydantic-settings==2.8.1
 
+# Vector DB & Embeddings
+pinecone==4.1.0
+sentence-transformers==2.2.2
+faiss-cpu==1.8.0.post1
+
 # Development & Testing 
 pytest==8.3.4
 
 # Optional: Logging
 loguru==0.7.3
+
+# Networking / DB support
+dnspython==2.7.0
