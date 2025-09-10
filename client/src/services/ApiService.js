@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
 
 class ApiService {
   constructor() {
@@ -32,49 +32,21 @@ class ApiService {
     }
   }
 
-  // Auth endpoints
-  async login(email, password) {
-    return this.request('/api/auth/login', {
+  // Health check
+  async checkHealth() {
+    return this.request('/health');
+  }
+
+  // Family endpoints
+  async createFamily(familyData) {
+    return this.request('/api/families/', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(familyData),
     });
   }
 
-  async register(userData) {
-    return this.request('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(userData),
-    });
-  }
-
-  async refreshToken() {
-    return this.request('/api/auth/refresh', {
-      method: 'POST',
-    });
-  }
-
-  // User endpoints
-  async getUserProfile() {
-    return this.request('/api/user/profile');
-  }
-
-  async updateUserProfile(profileData) {
-    return this.request('/api/user/profile', {
-      method: 'PUT',
-      body: JSON.stringify(profileData),
-    });
-  }
-
-  // Routes endpoints
-  async getUserRoutes() {
-    return this.request('/api/routes/user');
-  }
-
-  async visitPlace(placeId, location) {
-    return this.request('/api/routes/visit', {
-      method: 'POST',
-      body: JSON.stringify({ place_id: placeId, location }),
-    });
+  async getFamilies() {
+    return this.request('/api/families/');
   }
 
   // Chat endpoints
@@ -85,12 +57,9 @@ class ApiService {
     });
   }
 
-  // Family endpoints (si necesitas múltiples usuarios)
-  async createFamily(familyData) {
-    return this.request('/api/family/create', {
-      method: 'POST',
-      body: JSON.stringify(familyData),
-    });
+  // Routes endpoints
+  async getRoutes() {
+    return this.request('/api/routes/overview');
   }
 }
 
