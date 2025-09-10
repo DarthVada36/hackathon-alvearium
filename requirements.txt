@@ -1,25 +1,27 @@
-# Web framework
+## Web framework
 fastapi
 uvicorn[standard]
 
-# HTTP and utilities
+## HTTP and utilities
 requests
 loguru==0.7.3
 
-# Env & settings
+## Env & settings
 python-dotenv==1.0.1
 pydantic-settings==2.8.1
 
-# Caching
+## Database
+psycopg2-binary==2.9.5
+
+## Caching
 redis
 
-# Vector DB
-pinecone
+## Vector DB & Embeddings
+pinecone==4.1.0
+sentence-transformers==2.2.2
+faiss-cpu==1.8.0.post1
 
-# Embeddings
-sentence-transformers
-
-# Optional providers/APIs
+## Optional providers/APIs
 googlemaps
 langchain-openai
 langchain==0.3.14
@@ -28,5 +30,8 @@ langchain-core==0.3.28
 langchain-groq==0.2.7
 groq==0.14.0
 
-# Testing
+## Networking / DNS
+dnspython==2.7.0
+
+## Testing
 pytest==8.3.4
