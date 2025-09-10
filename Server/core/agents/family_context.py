@@ -1,11 +1,14 @@
 """
 Family Context - Gestión simple del contexto familiar
+ACTUALIZADO para usar base de datos real
 """
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from dataclasses import dataclass
+import logging
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class FamilyMember:
@@ -58,7 +61,7 @@ class FamilyContext:
             )
             for m in members_data
         ]
-    
+
     def has_young_children(self) -> bool:
         """¿Hay niños pequeños (3-7 años)?"""
         return any(child.age <= 7 for child in self.children)
@@ -269,15 +272,15 @@ class FamilyContext:
 _context_cache: Dict[int, FamilyContext] = {}
 
 
-async def load_family_context(family_id: int) -> FamilyContext:
-    """Carga contexto familiar desde BD o cache"""
+async def load_family_context(family_id: int, db) -> FamilyContext:
+    """Carga contexto familiar desde BD real"""
     
     # Buscar en cache primero
     if family_id in _context_cache:
         return _context_cache[family_id]
     
-    # Cargar desde BD
-    family_data = await _load_from_database(family_id)
+    # Cargar desde BD real
+    family_data = await _load_from_database(family_id, db)
     if not family_data:
         raise ValueError(f"Familia {family_id} no encontrada")
     
@@ -288,44 +291,148 @@ async def load_family_context(family_id: int) -> FamilyContext:
     return context
 
 
-async def save_family_context(context: FamilyContext):
-    """Guarda contexto en BD"""
+async def save_family_context(context: FamilyContext, db):
+    """Guarda contexto en BD real"""
     context_data = context.to_dict()
-    await _save_to_database(context.family_id, context_data)
+    await _save_to_database(context.family_id, context_data, db)
 
 
-async def _load_from_database(family_id: int) -> Optional[Dict[str, Any]]:
+async def _load_from_database(family_id: int, db) -> Optional[Dict[str, Any]]:
     """
-    Carga datos desde BD - IMPLEMENTAR con tu ORM
+    Carga datos desde BD real
     """
-    # TODO: Implementar con tu sistema de BD real
-    # Por ahora datos mock para testing
-    return {
-        "id": family_id,
-        "name": f"Familia {family_id}",
-        "preferred_language": "es",
-        "members": [
-            {"name": "María", "age": 35, "member_type": "adult"},
-            {"name": "Carlos", "age": 8, "member_type": "child"},
-            {"name": "Ana", "age": 6, "member_type": "child"}
-        ],
-        "route_progress": {
-            "current_poi_index": 0,
-            "points_earned": 0,
-            "current_location": {}
-        },
-        "visited_pois": [],
-        "conversation_context": {
-            "memory": [],
-            "current_speaker": None
+    try:
+        # Cargar datos de la familia
+        family_query = """
+            SELECT id, name, preferred_language 
+            FROM families 
+            WHERE id = %s
+        """
+        family_result = db.execute_query(family_query, (family_id,))
+        
+        if not family_result:
+            return None
+        
+        family_data = {
+            "id": family_result[0]['id'],
+            "name": family_result[0]['name'],
+            "preferred_language": family_result[0]['preferred_language'] or 'es'
         }
-    }
+        
+        # Cargar miembros de la familia
+        members_query = """
+            SELECT name, age, member_type 
+            FROM family_members 
+            WHERE family_id = %s
+        """
+        members_result = db.execute_query(members_query, (family_id,))
+        
+        family_data["members"] = [
+            {
+                "name": m['name'],
+                "age": m['age'],
+                "member_type": m['member_type']
+            }
+            for m in members_result
+        ] if members_result else []
+        
+        # Cargar progreso de la ruta
+        progress_query = """
+            SELECT current_poi_index, points_earned, current_location
+            FROM family_route_progress 
+            WHERE family_id = %s
+        """
+        progress_result = db.execute_query(progress_query, (family_id,))
+        
+        if progress_result:
+            family_data["route_progress"] = {
+                "current_poi_index": progress_result[0]['current_poi_index'],
+                "points_earned": progress_result[0]['points_earned'],
+                "current_location": progress_result[0]['current_location'] or {}
+            }
+        else:
+            family_data["route_progress"] = {
+                "current_poi_index": 0,
+                "points_earned": 0,
+                "current_location": {}
+            }
+        
+        # Cargar contexto de conversación
+        conv_query = """
+            SELECT conversation_context 
+            FROM families 
+            WHERE id = %s
+        """
+        conv_result = db.execute_query(conv_query, (family_id,))
+        
+        if conv_result and conv_result[0]['conversation_context']:
+            family_data["conversation_context"] = conv_result[0]['conversation_context']
+        else:
+            family_data["conversation_context"] = {
+                "memory": [],
+                "current_speaker": None
+            }
+        
+        # Cargar POIs visitados (esto sería de otra tabla si la tuvieras)
+        # Por ahora usar lista vacía
+        family_data["visited_pois"] = []
+        
+        return family_data
+        
+    except Exception as e:
+        logger.error(f"Error cargando familia {family_id}: {e}")
+        return None
 
 
-async def _save_to_database(family_id: int, context_data: Dict[str, Any]):
+async def _save_to_database(family_id: int, context_data: Dict[str, Any], db):
     """
-    Guarda en BD - IMPLEMENTAR con tu ORM
+    Guarda en BD real
     """
-    # TODO: Implementar queries reales
-    print(f"💾 Guardando familia {family_id}: {list(context_data.keys())}")
-    pass
+    try:
+        # Actualizar progreso de ruta
+        progress_data = context_data["route_progress"]
+        
+        # Verificar si existe registro de progreso
+        check_query = "SELECT id FROM family_route_progress WHERE family_id = %s"
+        exists = db.execute_query(check_query, (family_id,))
+        
+        if exists:
+            # Actualizar
+            update_query = """
+                UPDATE family_route_progress 
+                SET current_poi_index = %s, points_earned = %s, current_location = %s
+                WHERE family_id = %s
+            """
+            db.execute_query(update_query, (
+                progress_data["current_poi_index"],
+                progress_data["points_earned"],
+                progress_data["current_location"],
+                family_id
+            ))
+        else:
+            # Insertar
+            insert_query = """
+                INSERT INTO family_route_progress 
+                (family_id, current_poi_index, points_earned, current_location)
+                VALUES (%s, %s, %s, %s)
+            """
+            db.execute_query(insert_query, (
+                family_id,
+                progress_data["current_poi_index"],
+                progress_data["points_earned"],
+                progress_data["current_location"]
+            ))
+        
+        # Actualizar contexto de conversación
+        conv_query = """
+            UPDATE families 
+            SET conversation_context = %s
+            WHERE id = %s
+        """
+        db.execute_query(conv_query, (context_data["conversation_context"], family_id))
+        
+        logger.info(f"💾 Contexto de familia {family_id} guardado correctamente")
+        
+    except Exception as e:
+        logger.error(f"Error guardando contexto de familia {family_id}: {e}")
+        raise e

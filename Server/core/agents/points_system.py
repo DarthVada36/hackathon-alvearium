@@ -4,7 +4,7 @@ Points System - Sistema de puntos y gamificación
 """
 
 from typing import Dict, Any, List
-from family_context import FamilyContext
+from Server.core.agents.family_context import FamilyContext
 
 
 # Configuración de puntos

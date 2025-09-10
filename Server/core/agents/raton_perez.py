@@ -1,49 +1,60 @@
 """
 Ratoncito Pérez - Orquestador Principal 
+ACTUALIZADO para usar base de datos real
 """
 
 from typing import Dict, Any, Optional
 from datetime import datetime
 import sys
 import os
+import logging
+
+# Setup logging
+logger = logging.getLogger(__name__)
 
 # Imports locales
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from config import langchain_settings
 from core.services.groq_service import groq_service
 
-# Imports de módulos simplificados (SIN imports relativos)
-from family_context import FamilyContext, load_family_context, save_family_context
-from points_system import evaluate_points, get_celebration_message
-from madrid_knowledge import get_location_info, search_madrid_content
-from location_helper import check_poi_arrival, get_directions, get_next_poi
+# Imports de módulos simplificados
+from Server.core.agents.family_context import (
+    FamilyContext,
+    load_family_context,
+    save_family_context
+)
+from Server.core.agents.points_system import (
+    evaluate_points,
+    get_celebration_message
+)
+from Server.core.agents.madrid_knowledge import (
+    get_location_info,
+    search_madrid_content
+)
+from Server.core.agents.location_helper import (
+    check_poi_arrival,
+    get_directions,
+    get_next_poi
+)
 
 
 class RatonPerez:
-    """Orquestador principal del Ratoncito Pérez - Versión simplificada"""
+    """Orquestador principal del Ratoncito Pérez - Versión con BD real"""
     
-    def __init__(self):
+    def __init__(self, db):
         self.settings = langchain_settings
-        print("✅ Ratoncito Pérez inicializado (versión simplificada)")
+        self.db = db
+        logger.info("✅ Ratoncito Pérez inicializado (con base de datos real)")
     
     async def chat(self, family_id: int, message: str, 
                    location: Optional[Dict[str, float]] = None,
                    speaker_name: Optional[str] = None) -> Dict[str, Any]:
         """
-        Método principal de chat simplificado
-        
-        Args:
-            family_id: ID de la familia
-            message: Mensaje del usuario
-            location: Ubicación actual {"lat": float, "lng": float}
-            speaker_name: Nombre de quien habla
-        
-        Returns:
-            Respuesta completa con puntos y contexto
+        Método principal de chat con BD real
         """
         try:
-            # 1. Cargar contexto familiar
-            family_context = await load_family_context(family_id)
+            # 1. Cargar contexto familiar con BD
+            family_context = await load_family_context(family_id, self.db)
             
             # 2. Analizar situación actual
             situation = self._analyze_situation(message, location, family_context)
@@ -54,7 +65,7 @@ class RatonPerez:
             # 4. Generar respuesta
             response = await self._generate_response(family_context, message, situation, points_result)
             
-            # 5. Actualizar contexto y guardar
+            # 5. Actualizar contexto y guardar con BD
             await self._update_and_save_context(family_context, message, response, 
                                               speaker_name, points_result, situation)
             
@@ -68,7 +79,7 @@ class RatonPerez:
             }
             
         except Exception as e:
-            print(f"❌ Error en chat: {e}")
+            logger.error(f"❌ Error en chat: {e}")
             return {
                 "success": False,
                 "response": "¡Ups! El Ratoncito Pérez se ha despistado. ¿Puedes repetir? 🐭✨",
@@ -309,7 +320,7 @@ Proporciona información detallada manteniendo el carácter mágico."""
     async def _update_and_save_context(self, context: FamilyContext, user_message: str,
                                      agent_response: str, speaker_name: Optional[str],
                                      points_result: Dict[str, Any], situation: Dict[str, Any]):
-        """Actualiza contexto y lo guarda en BD"""
+        """Actualiza contexto y lo guarda en BD real"""
         
         # Actualizar memoria conversacional
         context.add_conversation(user_message, agent_response, speaker_name)
@@ -322,16 +333,11 @@ Proporciona información detallada manteniendo el carácter mágico."""
         # Actualizar progreso si llegaron a POI
         if situation["type"] == "poi_arrival":
             poi_data = situation["data"]
-            
-            # NO ES NECESARIO agregar POI aquí porque ya se hace en points_system.py
-            # El POI ya fue creado/actualizado en _evaluate_poi_arrival()
-            
-            # Actualizar índice actual
             context.current_poi_index = max(context.current_poi_index, 
                                           poi_data.get("poi_index", 0) + 1)
         
-        # Guardar en BD
-        await save_family_context(context)
+        # Guardar en BD real
+        await save_family_context(context, self.db)
     
     def _should_ask_question_at_poi(self, context: FamilyContext, poi_id: str) -> bool:
         """Determina si debe hacer una pregunta en este POI"""
@@ -409,19 +415,29 @@ Proporciona información detallada manteniendo el carácter mágico."""
 
 
 # Instancia global
-raton_perez = RatonPerez()
+raton_perez = None
 
 # Helper functions para endpoints
 async def process_chat_message(family_id: int, message: str, 
                              location: Optional[Dict] = None,
-                             speaker_name: Optional[str] = None) -> Dict[str, Any]:
-    """Procesa mensaje de chat"""
+                             speaker_name: Optional[str] = None,
+                             db=None) -> Dict[str, Any]:
+    """Procesa mensaje de chat con BD"""
+    global raton_perez
+    if not raton_perez:
+        raton_perez = RatonPerez(db)
     return await raton_perez.chat(family_id, message, location, speaker_name)
 
-async def get_family_status(family_id: int) -> Dict[str, Any]:
-    """Obtiene estado familiar"""
+async def get_family_status(family_id: int, db) -> Dict[str, Any]:
+    """Obtiene estado familiar con BD"""
+    global raton_perez
+    if not raton_perez:
+        raton_perez = RatonPerez(db)
     return await raton_perez.get_family_progress(family_id)
 
-async def get_next_destination(family_id: int) -> Dict[str, Any]:
-    """Obtiene siguiente destino"""
+async def get_next_destination(family_id: int, db) -> Dict[str, Any]:
+    """Obtiene siguiente destino con BD"""
+    global raton_perez
+    if not raton_perez:
+        raton_perez = RatonPerez(db)
     return await raton_perez.suggest_next_destination(family_id)
