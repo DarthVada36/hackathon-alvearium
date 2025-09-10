@@ -1,18 +1,32 @@
-# LangChain Ecosystem 
+# Web framework
+fastapi
+uvicorn[standard]
+
+# HTTP and utilities
+requests
+loguru==0.7.3
+
+# Env & settings
+python-dotenv==1.0.1
+pydantic-settings==2.8.1
+
+# Caching
+redis
+
+# Vector DB
+pinecone
+
+# Embeddings
+sentence-transformers
+
+# Optional providers/APIs
+googlemaps
+langchain-openai
 langchain==0.3.14
 langchain-community==0.3.12
 langchain-core==0.3.28
 langchain-groq==0.2.7
-
-# LLM Provider
 groq==0.14.0
 
-# Configuration & Environment
-python-dotenv==1.0.1
-pydantic-settings==2.8.1
-
-# Development & Testing 
+# Testing
 pytest==8.3.4
-
-# Optional: Logging
-loguru==0.7.3

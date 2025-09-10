@@ -3,54 +3,47 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
+import os
 import uvicorn
 
+# Load .env (optional)
+try:  # pragma: no cover
+    from dotenv import load_dotenv  # type: ignore
+
+    load_dotenv()
+except Exception:
+    pass
+
+# Pinecone health service (optional)
+try:
+    from Server.core.services.pinecone_service import pinecone_service
+except Exception:
+    pinecone_service = None
+
+# App + lifespan (DB wiring)
 from Server.api.endpoints import chat, routes, family
-from core.models.database import Database
+from Server.core.models.database import Database
 from Server.core.agents.raton_perez import raton_perez, RatonPerez
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando aplicación Ratoncito Pérez Digital...")
 
-    # Iniciar DB y guardarla en app.state
     db = Database()
     if not db.health_check():
         logger.error("Error: No se puede conectar a la base de datos")
         raise RuntimeError("Database connection failed")
 
     logger.info("✅ Base de datos conectada correctamente")
-    app.state.db = db  # 🔑 Guardar en app.state para que las dependencias puedan usarla
+    app.state.db = db
 
-    # Inicializar agente
     global raton_perez
     raton_perez = RatonPerez(db)
     logger.info("✅ Ratoncito Pérez inicializado (con base de datos real)")
-
-    # Verificar tablas
-    required_tables = ['users', 'families', 'family_members', 'routes',
-                       'family_route_progress', 'location_updates']
-    try:
-        if db.connection:
-            result = db.execute_query("""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public'
-                AND table_name = ANY(%s)
-            """, (required_tables,))
-            existing = [r['table_name'] for r in result] if result else []
-            missing = set(required_tables) - set(existing)
-            if missing:
-                logger.warning(f"⚠️ Tablas faltantes: {list(missing)}")
-            else:
-                logger.info("✅ Todas las tablas requeridas están presentes")
-        else:
-            logger.info("⚠️ Solo API Supabase disponible, omitiendo verificación directa")
-    except Exception as e:
-        logger.error(f"Error verificando esquema: {e}")
 
     yield
 
@@ -58,13 +51,13 @@ async def lifespan(app: FastAPI):
     if db:
         db.close()
 
+
 app = FastAPI(
     title="Ratoncito Pérez Digital API",
     description="API para el agente turístico virtual Ratoncito Pérez",
-    version="1.0.0",
-    lifespan=lifespan
+    version=os.getenv("APP_VERSION", "1.0.0"),
+    lifespan=lifespan,
 )
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -76,20 +69,28 @@ app.add_middleware(
 app.include_router(chat.router, prefix="/api")
 app.include_router(family.router, prefix="/api")
 app.include_router(routes.router, prefix="/api")
+# Optional debug router
+try:
+    from Server.api.endpoints.debug import router as debug_router
+
+    app.include_router(debug_router)
+except Exception:
+    pass
 
 @app.get("/")
 async def root():
     return {
         "message": "¡Hola! Soy el Ratoncito Pérez Digital 🐭",
         "description": "API para experiencias turísticas familiares en Madrid",
-        "version": "1.0.0",
+        "version": os.getenv("APP_VERSION", "1.0.0"),
         "endpoints": {
             "health": "/health",
             "chat": "/api/chat",
             "families": "/api/families",
             "routes": "/api/routes",
-            "docs": "/docs"
-        }
+            "docs": "/docs",
+            "debug": "/debug",
+        },
     }
 
 @app.get("/health")
@@ -97,8 +98,28 @@ async def health_check(request: Request):
     db = getattr(request.app.state, "db", None)
     status = {
         "status": "healthy",
-        "database": "connected" if db and db.health_check() else "disconnected"
+        "database": "connected" if db and db.health_check() else "disconnected",
     }
+    # Pinecone + Redis health
+    try:
+        status["pinecone"] = (
+            pinecone_service.get_status() if pinecone_service is not None else {"available": False}
+        )
+    except Exception as e:
+        status["pinecone"] = {"error": str(e)}
+    try:
+        import redis  # type: ignore
+
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            client = redis.StrictRedis.from_url(redis_url, socket_connect_timeout=0.25, socket_timeout=0.25)
+            ok = bool(client.ping())
+            status["redis"] = {"available": ok, "url": redis_url}
+        else:
+            status["redis"] = {"available": False, "reason": "REDIS_URL not set"}
+    except Exception as e:
+        status["redis"] = {"available": False, "error": str(e)}
+
     if status["database"] == "disconnected":
         status["status"] = "unhealthy"
     return status

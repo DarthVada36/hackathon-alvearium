@@ -4,9 +4,20 @@ Wrapper para LangChain + Groq con configuración optimizada
 """
 
 from typing import Optional, Dict, Any
-from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_core.language_models.chat_models import BaseChatModel
+try:
+    from langchain_groq import ChatGroq  # type: ignore
+    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage  # type: ignore
+    from langchain_core.language_models.chat_models import BaseChatModel  # type: ignore
+except Exception:  # pragma: no cover - optional dependency in local tests
+    ChatGroq = None  # type: ignore
+    BaseChatModel = None  # type: ignore
+    class HumanMessage:  # type: ignore
+        def __init__(self, content: str):
+            self.content = content
+    class SystemMessage(HumanMessage):
+        pass
+    class AIMessage(HumanMessage):
+        pass
 import sys
 import os
 
@@ -20,13 +31,13 @@ class GroqService:
     
     def __init__(self):
         self.settings = langchain_settings
-        self._llm: Optional[BaseChatModel] = None
+        self._llm = None
         self._initialize_llm()
     
     def _initialize_llm(self) -> None:
         """Inicializa el modelo LLM de Groq"""
         try:
-            if not self.settings or not self.settings.validate_groq_key():
+            if not self.settings or not self.settings.validate_groq_key() or ChatGroq is None:
                 raise ValueError("API key de Groq no válida")
             
             self._llm = ChatGroq(
@@ -46,7 +57,7 @@ class GroqService:
             self._llm = None
     
     @property
-    def llm(self) -> BaseChatModel:
+    def llm(self) -> object:
         """Getter para el modelo LLM"""
         if self._llm is None:
             raise RuntimeError("GroqService no está inicializado correctamente")
@@ -184,7 +195,7 @@ groq_service = GroqService()
 
 
 # Función helper para uso rápido
-def get_groq_llm() -> BaseChatModel:
+def get_groq_llm() -> object:
     """Helper para obtener el LLM configurado"""
     return groq_service.llm
 

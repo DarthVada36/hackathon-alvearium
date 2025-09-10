@@ -1,14 +1,22 @@
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, Any
 import logging
 
 from Server.core.models.schemas import ChatMessage, ChatResponse
-from Server.core.agents.raton_perez import process_chat_message, get_family_status as get_family_status_service
+from Server.core.agents.raton_perez import (
+    process_chat_message,
+    get_family_status as get_family_status_service,
+)
 from Server.core.models.database import Database
 from Server.api.dependencies import get_db
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
+
+
+@router.get("/ping")
+def ping():
+    return {"service": "chat", "ok": True}
+
 
 @router.post("/message", response_model=ChatResponse)
 async def chat_endpoint(chat_data: ChatMessage, db: Database = Depends(get_db)):
@@ -21,12 +29,13 @@ async def chat_endpoint(chat_data: ChatMessage, db: Database = Depends(get_db)):
             message=chat_data.message,
             location=chat_data.location,
             speaker_name=chat_data.speaker_name,
-            db=db
+            db=db,
         )
         return result
     except Exception as e:
         logger.error(f"Error en endpoint chat: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/family/{family_id}/status")
 async def get_family_status(family_id: int, db: Database = Depends(get_db)):

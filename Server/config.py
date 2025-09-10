@@ -7,20 +7,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class LangChainSettings(BaseSettings):
-    """Configuración específica para LangChain, Groq, Supabase y Pinecone"""
-    
+    """Configuración específica para LangChain, Groq, Supabase y Pinecone.
+
+    Nota: Muchos campos son opcionales para permitir ejecutar tests y el servidor
+    sin depender de todos los servicios externos durante el desarrollo.
+    """
+
     # === Claves y URLs ===
-    groq_api_key: str
-    supabase_url: str
-    supabase_public_key: str
-    supabase_secret_key: str
-    pinecone_api_key: str
-    pinecone_environment: str
-    pinecone_index_name: str
-    pinecone_dimension: int
-    pinecone_metric: str
-    pinecone_embedding_model: str
-    pinecone_host: str
+    groq_api_key: Optional[str] = None
+    supabase_url: Optional[str] = None
+    supabase_public_key: Optional[str] = None
+    supabase_secret_key: Optional[str] = None
+
+    # Pinecone (v3 serverless) – hacer opcionales para no romper en local
+    pinecone_api_key: Optional[str] = None
+    pinecone_environment: Optional[str] = None
+    pinecone_index_name: Optional[str] = None
+    pinecone_dimension: Optional[int] = None
+    pinecone_metric: Optional[str] = None
+    pinecone_embedding_model: Optional[str] = None
+    pinecone_host: Optional[str] = None
+
+    # Otros
     madrid_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
 
@@ -55,5 +63,6 @@ try:
     langchain_settings = LangChainSettings()
     print(f"✅ Configuración LangChain cargada - Modelo: {langchain_settings.agent_model}")
 except Exception as e:
-    print(f"❌ Error cargando configuración: {e}")
-    langchain_settings = None
+    # No fallar al importar en entornos de test/desarrollo si faltan variables
+    print(f"⚠️  Config por defecto (faltan variables opcionales): {e}")
+    langchain_settings = LangChainSettings()  # instancia con defaults
