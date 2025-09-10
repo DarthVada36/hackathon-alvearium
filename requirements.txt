@@ -1,0 +1,27 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+redis
+pinecone
+sentence-transformers
+googlemaps
+langchain-openai
+# LangChain Ecosystem 
+langchain==0.3.14
+langchain-community==0.3.12
+langchain-core==0.3.28
+langchain-groq==0.2.7
+
+# LLM Provider
+groq==0.14.0
+
+# Configuration & Environment
+python-dotenv==1.0.1
+pydantic-settings==2.8.1
+
+# Development & Testing 
+pytest==8.3.4
+
+# Optional: Logging
+loguru==0.7.3
