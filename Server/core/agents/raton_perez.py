@@ -1,6 +1,5 @@
 """
 Ratoncito Pérez - Orquestador Principal 
-ACTUALIZADO para usar base de datos real
 """
 
 from typing import Dict, Any, Optional
@@ -17,7 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from config import langchain_settings
 from core.services.groq_service import groq_service
 
-# Imports de módulos simplificados
+# Imports de módulos corregidos
 from Server.core.agents.family_context import (
     FamilyContext,
     load_family_context,
@@ -33,43 +32,55 @@ from Server.core.agents.madrid_knowledge import (
 )
 from Server.core.agents.location_helper import (
     check_poi_arrival,
-    get_directions,
-    get_next_poi
+    get_directions_osm,
+    get_next_poi,
+    find_nearest_poi,
+    is_valid_location
 )
 
 
 class RatonPerez:
-    """Orquestador principal del Ratoncito Pérez - Versión con BD real"""
+    """Orquestador principal del Ratoncito Pérez"""
     
     def __init__(self, db):
         self.settings = langchain_settings
         self.db = db
-        logger.info("✅ Ratoncito Pérez inicializado (con base de datos real)")
-    
+        logger.info("✅ Ratoncito Pérez inicializado")
+
     async def chat(self, family_id: int, message: str, 
                    location: Optional[Dict[str, float]] = None,
                    speaker_name: Optional[str] = None) -> Dict[str, Any]:
         """
-        Método principal de chat con BD real
+        Método principal de chat 
         """
         try:
-            # 1. Cargar contexto familiar con BD
+            logger.info(f"🎭 Procesando chat - Familia: {family_id}, Mensaje: '{message[:50]}...'")
+            
+            # 1. Cargar contexto familiar
             family_context = await load_family_context(family_id, self.db)
+            logger.info(f"👨‍👩‍👧‍👦 Contexto cargado - Puntos: {family_context.total_points}")
             
-            # 2. Analizar situación actual
-            situation = self._analyze_situation(message, location, family_context)
+            # 2. Analizar situación 
+            situation = await self._analyze_situation_final(message, location, family_context)
+            logger.info(f"📋 Situación detectada: {situation['type']}, POI: {situation.get('current_poi_id', 'ninguno')}")
             
-            # 3. Evaluar puntos
+            # 3. Evaluar puntos 
             points_result = evaluate_points(family_context, message, situation)
+            logger.info(f"🎯 Puntos evaluados: {points_result.get('points_earned', 0)}")
             
-            # 4. Generar respuesta
-            response = await self._generate_response(family_context, message, situation, points_result)
+            # 4. Generar respuesta con contexto
+            response = await self._generate_contextual_response(
+                family_context, message, situation, points_result
+            )
             
-            # 5. Actualizar contexto y guardar con BD
-            await self._update_and_save_context(family_context, message, response, 
-                                              speaker_name, points_result, situation)
+            # 5. Actualizar y guardar contexto
+            await self._update_context_improved(
+                family_context, message, response, speaker_name, 
+                points_result, situation
+            )
             
-            return {
+            # 6. Preparar respuesta final
+            final_response = {
                 "success": True,
                 "response": response,
                 "points_earned": points_result.get("points_earned", 0),
@@ -78,339 +89,449 @@ class RatonPerez:
                 "achievements": points_result.get("achievements", [])
             }
             
+            logger.info(f"✅ Chat procesado exitosamente - Total puntos: {family_context.total_points}")
+            return final_response
+            
         except Exception as e:
             logger.error(f"❌ Error en chat: {e}")
             return {
                 "success": False,
-                "response": "¡Ups! El Ratoncito Pérez se ha despistado. ¿Puedes repetir? 🐭✨",
+                "response": "¡Ups! El Ratoncito Pérez se ha despistado un momento. ¿Puedes repetir? 🐭✨",
+                "points_earned": 0,
+                "total_points": 0,
+                "situation": "error",
+                "achievements": [],
                 "error": str(e)
             }
     
-    def _analyze_situation(self, message: str, location: Optional[Dict], 
-                          context: FamilyContext) -> Dict[str, Any]:
-        """Analiza qué tipo de situación tenemos"""
-        
-        message_lower = message.lower()
+    async def _analyze_situation_final(self, message: str, location: Optional[Dict], 
+                                      context: FamilyContext) -> Dict[str, Any]:
+        """
+        Análisis de situación
+        """
+        message_lower = message.lower().strip()
         situation = {"type": "general_chat", "data": {}}
         
-        # ¿Llegaron a un POI?
-        if location:
-            poi_check = check_poi_arrival(location)
+        # 1. VERIFICAR SI SUGIERE MOVIMIENTO/LLEGADA antes de check_poi_arrival
+        movement_keywords = [
+            "hemos llegado", "llegamos", "estamos en", "aquí estamos", "ya estamos",
+            "hemos venido", "we arrived", "we're here", "here we are"
+        ]
+        
+        suggests_arrival = any(keyword in message_lower for keyword in movement_keywords)
+        
+        # 2. SOLO verificar POI arrival si el mensaje sugiere llegada Y hay ubicación válida
+        if suggests_arrival and location and is_valid_location(location):
+            logger.info(f"🚶 Mensaje sugiere llegada: '{message_lower}'")
+            # FIX CRÍTICO: AWAIT añadido aquí
+            poi_check = await check_poi_arrival(location)
+            
             if poi_check.get("arrived"):
+                logger.info(f"🎯 LLEGADA CONFIRMADA: {poi_check['poi_name']}")
                 situation = {
                     "type": "poi_arrival",
                     "data": {
                         "poi_id": poi_check["poi_id"],
                         "poi_name": poi_check["poi_name"],
-                        "poi_index": poi_check.get("poi_index", context.current_poi_index)
+                        "poi_index": poi_check.get("poi_index", 0),
+                        "distance": poi_check.get("distance_meters", 0)
                     },
-                    "current_poi_id": poi_check["poi_id"]  # NUEVO: Para vincular puntos
+                    "current_poi_id": poi_check["poi_id"]
                 }
+                return situation
         
-        # Determinar POI actual para vincular engagement/preguntas
-        current_poi_id = self._get_current_poi_id(location, context)
+        # 3. Determinar POI actual para contexto 
+        current_poi_id = self._determine_current_poi(location, context)
         if current_poi_id:
             situation["current_poi_id"] = current_poi_id
+            logger.info(f"📍 POI actual para contexto: {current_poi_id}")
         
-        # ¿Pregunta sobre ubicación?
-        location_keywords = ["qué es", "cuéntame sobre", "historia", "what is", "tell me about"]
-        if any(keyword in message_lower for keyword in location_keywords):
+        # 4. PRIORIDAD: Tipo de interacción basado en contenido del mensaje
+        
+        # ¿Pregunta sobre ubicación/lugar?
+        location_question_keywords = [
+            "qué es", "cuéntame", "dime sobre", "historia de", "información",
+            "what is", "tell me about", "history of"
+        ]
+        if any(keyword in message_lower for keyword in location_question_keywords):
             situation["type"] = "location_question"
             situation["data"] = {"query": message}
+            logger.info("❓ Pregunta sobre ubicación detectada")
+            return situation
         
-        # ¿Pide direcciones?
-        nav_keywords = ["dónde", "cómo llegar", "where", "how to get", "dirección"]
-        if any(keyword in message_lower for keyword in nav_keywords):
+        # ¿Pregunta de navegación?
+        navigation_keywords = [
+            "cómo llegar", "dónde está", "dirección", "siguiente lugar",
+            "how to get", "where is", "directions", "next place"
+        ]
+        if any(keyword in message_lower for keyword in navigation_keywords):
             situation["type"] = "navigation"
             situation["data"] = {"location": location}
+            logger.info("🧭 Pregunta de navegación detectada")
+            return situation
         
-        # ¿Pide historia/cuento?
-        story_keywords = ["historia", "cuento", "leyenda", "story", "tale"]
+        # ¿Solicitud de historia/cuento?
+        story_keywords = [
+            "historia", "cuento", "leyenda", "cuenta", "story", "tale", "legend"
+        ]
         if any(keyword in message_lower for keyword in story_keywords):
             situation["type"] = "story_request"
             situation["data"] = {"topic": message}
+            logger.info("📚 Solicitud de historia detectada")
+            return situation
         
-        # ¿Es respuesta a pregunta de POI?
-        if self._is_poi_question_response(context, message):
+        # ¿Es respuesta a pregunta del agente?
+        if self._is_response_to_agent_question(context, message):
             situation["type"] = "poi_question"
             situation["data"] = {"response": message}
+            logger.info("💬 Respuesta a pregunta detectada")
+            return situation
+        
+        # 5. DEFAULT: Chat general
+        situation["type"] = "general_chat"
+        situation["data"] = {"message": message}
+        logger.info("💬 Chat general detectado")
         
         return situation
     
-    def _get_current_poi_id(self, location: Optional[Dict], context: FamilyContext) -> Optional[str]:
-        """Determina el POI actual basado en ubicación o contexto"""
-        if location:
-            poi_check = check_poi_arrival(location)
-            # CORREGIDO: check_poi_arrival solo devuelve 'arrived', no 'nearby'
-            if poi_check.get("arrived"):
-                return poi_check.get("poi_id")
-            
-            # NUEVO: También verificar distancia para POIs cercanos (dentro de 100m)
-            closest_poi = poi_check.get("closest_poi")
-            distance = poi_check.get("distance_to_closest", float('inf'))
-            if distance <= 100:  # Consideramos "estar en POI" si está a menos de 100m
-                # Mapear nombre a ID
-                poi_name_to_id = {
-                    "Plaza Mayor": "plaza_mayor",
-                    "Palacio Real": "palacio_real", 
-                    "Mercado de San Miguel": "mercado_san_miguel",
-                    "Teatro Real": "teatro_real",
-                    "Puerta del Sol": "puerta_del_sol"
-                }
-                return poi_name_to_id.get(closest_poi)
+    def _determine_current_poi(self, location: Optional[Dict], context: FamilyContext) -> Optional[str]:
+        """
+        Determina el POI actual basado en ubicación o contexto
+        """
+        # Método 1: Por ubicación (prioritario)
+        if location and is_valid_location(location):
+            nearest = find_nearest_poi(location)
+            if nearest and not nearest.get("error"):
+                distance = nearest.get("distance_meters", float('inf'))
+                # Si está cerca (dentro de 150m), consideramos que está en ese POI
+                if distance <= 150:
+                    logger.info(f"📍 POI por proximidad: {nearest['poi_id']} ({distance}m)")
+                    return nearest["poi_id"]
         
-        # Fallback: usar POI actual del contexto
-        return context.get_current_poi_id()
+        # Método 2: Por contexto - último POI visitado
+        if context.visited_pois:
+            last_poi = context.visited_pois[-1]
+            logger.info(f"📍 POI por contexto: {last_poi.get('poi_id')}")
+            return last_poi.get("poi_id")
+        
+        # Método 3: Por índice actual
+        current_poi_id = context.get_current_poi_id()
+        if current_poi_id:
+            logger.info(f"📍 POI por índice: {current_poi_id}")
+            return current_poi_id
+        
+        logger.info("📍 No se pudo determinar POI actual")
+        return None
     
-    def _is_poi_question_response(self, context: FamilyContext, message: str) -> bool:
-        """Detecta si el mensaje es respuesta a una pregunta del POI"""
+    def _is_response_to_agent_question(self, context: FamilyContext, message: str) -> bool:
+        """
+        Detecta si el mensaje es respuesta a una pregunta del agente
+        """
+        if len(message.strip()) < 3:
+            return False
+        
+        # Verificar mensajes recientes del agente
         recent_messages = context.get_recent_messages(2)
         for exchange in recent_messages:
             agent_response = exchange.get("agent_response", "")
-            if "?" in agent_response:
-                # Verificar que no sea rechazo
-                rejection_words = ["no sé", "no lo sé", "paso", "siguiente"]
+            # Si el agente hizo una pregunta reciente
+            if "?" in agent_response and len(agent_response) > 20:
+                # Y el usuario no está rechazando
+                rejection_words = ["no sé", "paso", "siguiente", "no quiero"]
                 if not any(word in message.lower() for word in rejection_words):
+                    logger.info("💭 Detectada respuesta a pregunta del agente")
                     return True
+        
         return False
     
-    async def _generate_response(self, context: FamilyContext, message: str,
-                               situation: Dict[str, Any], points_result: Dict[str, Any]) -> str:
-        """Genera respuesta usando Groq con prompt contextualizado"""
-        
-        # Prompt base personalizado por edad
-        base_prompt = self._get_personality_prompt(context)
+    async def _generate_contextual_response(self, context: FamilyContext, message: str,
+                                          situation: Dict[str, Any], 
+                                          points_result: Dict[str, Any]) -> str:
+        """
+        Genera respuesta con contexto 
+        """
+        # Prompt base adaptado a la familia
+        base_prompt = self._build_family_prompt(context)
         
         # Información adicional según situación
-        additional_info = ""
+        situation_context = await self._build_situation_context(situation, context)
         
-        if situation["type"] == "poi_arrival":
-            poi_data = situation["data"]
-            location_info = get_location_info(poi_data["poi_id"])
-            additional_info = f"\n\nINFO UBICACIÓN ACTUAL:\n{location_info}"
-            
-            # Agregar pregunta específica del POI si es apropiado
-            if self._should_ask_question_at_poi(context, poi_data["poi_id"]):
-                poi_question = self._get_poi_question(poi_data["poi_id"], context.language)
-                additional_info += f"\n\nPREGUNTA PARA HACERLES:\n{poi_question}"
-        
-        elif situation["type"] == "location_question":
-            search_info = search_madrid_content(message)
-            additional_info = f"\n\nINFORMACIÓN ENCONTRADA:\n{search_info}"
-        
-        elif situation["type"] == "navigation":
-            directions = get_directions(context.current_location, context.current_poi_index)
-            additional_info = f"\n\nDIRECCIONES:\n{directions}"
-        
-        elif situation["type"] == "story_request":
-            stories = get_location_info(context.current_poi_index, info_type="stories")
-            additional_info = f"\n\nHISTORIAS DISPONIBLES:\n{stories}"
-        
-        # Celebraciones de puntos
-        celebration = ""
+        # Información de celebración de puntos
+        celebration_context = ""
         if points_result.get("points_earned", 0) > 0:
-            celebration = f"\n\n{get_celebration_message(points_result, context.language)}"
+            celebration = get_celebration_message(points_result, context.language)
+            if celebration:
+                celebration_context = f"\n\nCELEBRACIÓN DE PUNTOS:\n{celebration}"
         
-        # Contexto familiar
-        family_info = context.get_context_summary()
+        # Contexto conversacional
+        conversation_context = self._build_conversation_context(context)
         
-        # PROMPT MEJORADO CON CONTEXTO CONVERSACIONAL
+        # Construir prompt final
         is_first_interaction = len(context.conversation_history) == 0
         
         if is_first_interaction:
-            # Primera interacción - Presentación
+            # Primera interacción - Presentación personalizada
             full_prompt = f"""{base_prompt}
 
-CONTEXTO FAMILIAR:
-{family_info}
+SITUACIÓN: Primera vez que hablas con esta familia. Preséntate como el Ratoncito Pérez.
 
-SITUACIÓN: Es la primera vez que hablas con esta familia. Preséntate como el Ratoncito Pérez.
-{additional_info}
-{celebration}
+{situation_context}
+{celebration_context}
+{conversation_context}
 
-Saluda de manera mágica y pregunta cómo puedes ayudarles en su aventura por Madrid."""
+Haz una presentación mágica y personalizada. Pregunta qué les interesa de Madrid."""
         else:
-            # Conversación continuada - Sin presentación
+            # Conversación continuada
             full_prompt = f"""{base_prompt}
 
-CONTEXTO FAMILIAR:
-{family_info}
+SITUACIÓN: Continúa la conversación como el Ratoncito Pérez (ya te conocen).
+TIPO DE SITUACIÓN: {situation['type']}
 
-SITUACIÓN ACTUAL: {situation['type']}
-CONTINÚA LA CONVERSACIÓN como el Ratoncito Pérez (ya te conocen, no te presentes de nuevo).
-{additional_info}
-{celebration}
+{situation_context}
+{celebration_context}
+{conversation_context}
 
-Responde de manera natural y contextual al mensaje."""
+Responde de manera contextual y natural al mensaje."""
         
-        # Generar respuesta con historial conversacional
+        # Generar con Groq
         try:
-            conversation_history = context.get_conversation_history()
+            # Preparar historial para LangChain
+            conversation_history = []
+            for msg in context.get_conversation_history():
+                conversation_history.append({
+                    "role": "user", 
+                    "content": msg.get("user_message", "")
+                })
+                conversation_history.append({
+                    "role": "assistant", 
+                    "content": msg.get("agent_response", "")
+                })
+            
             messages = groq_service.create_messages(full_prompt, message, conversation_history)
             response = await groq_service.generate_response(messages)
+            
+            logger.info(f"🐭 Respuesta generada: {len(response)} caracteres")
             return response
+            
         except Exception as e:
-            print(f"Error generando respuesta con LLM: {e}")
-            if is_first_interaction:
-                return "¡Hola! Soy el Ratoncito Pérez y estoy aquí para ayudaros en vuestra aventura por Madrid. ¿Qué os gustaría saber? 🐭✨"
-            else:
-                return "¡Perfecto! ¿En qué más puedo ayudaros? 🐭✨"
+            logger.error(f"❌ Error generando respuesta: {e}")
+            return self._get_fallback_response(context, situation)
     
-    def _get_personality_prompt(self, context: FamilyContext) -> str:
-        """Obtiene prompt de personalidad adaptado CON INFORMACIÓN FAMILIAR"""
-        
-        # Personalidad base
-        if context.language == "en":
-            base = f"""You are the Tooth Fairy (Ratoncito Pérez), a magical and charming guide of Madrid.
-You help families discover the city in a fun, educational way.
-
-FAMILY INFORMATION:
-- Family name: {context.family_name}
-- Adults: {', '.join(context.adult_names)} 
-- Children: {', '.join([f"{name} ({age})" for name, age in zip(context.child_names, context.child_ages)])}
-- Address them naturally by their names when appropriate."""
-        else:
-            base = f"""Eres el Ratoncito Pérez, un guía mágico y encantador de Madrid.
-Ayudas a familias a descubrir la ciudad de manera divertida y educativa.
+    def _build_family_prompt(self, context: FamilyContext) -> str:
+        """
+        Construye prompt personalizado por familia
+        """
+        base = f"""Eres el Ratoncito Pérez, guía mágico de Madrid. 
 
 INFORMACIÓN FAMILIAR:
 - Familia: {context.family_name}
-- Adultos: {', '.join(context.adult_names)}
-- Niños: {', '.join([f"{name} ({age} años)" for name, age in zip(context.child_names, context.child_ages)])}
-- Dirígete a ellos por sus nombres cuando sea apropiado."""
+- Adultos: {', '.join(context.adult_names) if context.adult_names else 'Ninguno'}
+- Niños: {', '.join([f"{name} ({age} años)" for name, age in zip(context.child_names, context.child_ages)]) if context.child_names else 'Ninguno'}
+- Idioma: {context.language}
+- Puntos actuales: {context.total_points}"""
         
-        # Adaptación por edad usando la edad más joven
+        # Adaptación por edad del niño más pequeño
         youngest_age = context.get_youngest_age()
         
-        if youngest_age and youngest_age <= 7:  # Niños pequeños
-            if context.language == "en":
-                age_adapt = f"""Use simple language perfect for {youngest_age}-year-olds, magical elements, and short explanations. 
-Be very enthusiastic and use emojis. Make everything sound like an adventure.
-Address the children by name: {', '.join(context.child_names)}."""
-            else:
-                age_adapt = f"""Usa lenguaje simple perfecto para niños de {youngest_age} años, elementos mágicos y explicaciones cortas.
-Sé muy entusiasta y usa emojis. Haz que todo suene como una aventura.
-Dirígete a los niños por su nombre: {', '.join(context.child_names)}."""
-                
-        elif youngest_age and youngest_age <= 12:  # Niños medianos
-            if context.language == "en":
-                age_adapt = f"""Adapt for ages {youngest_age} to {context.get_oldest_child_age()}. Provide interesting facts and mini-challenges.
-Use engaging language appropriate for {', '.join(context.child_names)} and the adults."""
-            else:
-                age_adapt = f"""Adapta para edades de {youngest_age} a {context.get_oldest_child_age()} años. Proporciona datos interesantes y mini-retos.
-Usa lenguaje atractivo apropiado para {', '.join(context.child_names)} y los adultos."""
-                
-        elif youngest_age and youngest_age >= 13:  # Adolescentes
-            if context.language == "en":
-                age_adapt = f"""Provide detailed historical context for teenagers like {', '.join(context.child_names)}.
-Use a conversational tone, less childish language. Include interesting facts."""
-            else:
-                age_adapt = f"""Proporciona contexto histórico detallado para adolescentes como {', '.join(context.child_names)}.
-Usa un tono conversacional, menos infantil. Incluye datos interesantes."""
-        else:  # Solo adultos
-            if context.language == "en":
-                age_adapt = f"""Tailor content for adults {', '.join(context.adult_names)}. 
-Provide detailed information while maintaining the magical character."""
-            else:
-                age_adapt = f"""Adapta el contenido para los adultos {', '.join(context.adult_names)}.
-Proporciona información detallada manteniendo el carácter mágico."""
+        if youngest_age and youngest_age <= 7:
+            age_prompt = f"""
+ESTILO DE COMUNICACIÓN:
+- Usa lenguaje muy simple para niños de {youngest_age} años
+- Incluye elementos mágicos y emojis
+- Haz que todo suene como una aventura
+- Explica las cosas de forma muy básica"""
         
-        return f"{base}\n\n{age_adapt}"
+        elif youngest_age and youngest_age <= 12:
+            age_prompt = f"""
+ESTILO DE COMUNICACIÓN:
+- Usa lenguaje apropiado para niños de {youngest_age}-{context.get_oldest_child_age() or youngest_age} años
+- Incluye datos interesantes y mini-retos
+- Balance entre diversión y educación"""
+        
+        elif youngest_age and youngest_age >= 13:
+            age_prompt = f"""
+ESTILO DE COMUNICACIÓN:
+- Usa lenguaje para adolescentes
+- Proporciona contexto histórico detallado
+- Menos infantil, más conversacional"""
+        
+        else:  # Solo adultos
+            age_prompt = f"""
+ESTILO DE COMUNICACIÓN:
+- Contenido para adultos con interés turístico
+- Información cultural y histórica detallada
+- Mantén el carácter mágico del Ratoncito Pérez"""
+        
+        return base + age_prompt
     
-    async def _update_and_save_context(self, context: FamilyContext, user_message: str,
+    async def _build_situation_context(self, situation: Dict[str, Any], context: FamilyContext) -> str:
+        """
+        Construye contexto específico de la situación 
+        """
+        situation_type = situation["type"]
+        situation_context = ""
+        
+        if situation_type == "poi_arrival":
+            poi_data = situation["data"]
+            location_info = get_location_info(poi_data["poi_id"], "basic_info")
+            situation_context = f"""
+LLEGADA A POI:
+- Ubicación: {poi_data['poi_name']}
+- Es la primera vez que llegan aquí
+- Celebra su llegada y comparte información básica
+
+INFORMACIÓN DEL LUGAR:
+{location_info}"""
+        
+        elif situation_type == "location_question":
+            query = situation["data"]["query"]
+            search_info = search_madrid_content(query)
+            situation_context = f"""
+PREGUNTA SOBRE UBICACIÓN:
+- Consulta: {query}
+- Proporciona información educativa e interesante
+
+INFORMACIÓN DISPONIBLE:
+{search_info}"""
+        
+        elif situation_type == "navigation":
+            current_location = situation["data"].get("location")
+            next_poi_info = get_next_poi(context.current_poi_index, current_location)
+            if not next_poi_info.get("completed"):
+                # FIX CRÍTICO: AWAIT añadido aquí
+                directions = await get_directions_osm(current_location, context.current_poi_index)
+                situation_context = f"""
+NAVEGACIÓN SOLICITADA:
+- Siguiente destino: {next_poi_info.get('poi_name', 'Siguiente POI')}
+- Proporciona direcciones claras y motivadoras
+
+DIRECCIONES:
+{directions}"""
+        
+        elif situation_type == "story_request":
+            current_poi_id = situation.get("current_poi_id")
+            if current_poi_id:
+                stories = get_location_info(current_poi_id, "stories")
+                situation_context = f"""
+HISTORIA SOLICITADA:
+- Ubicación actual: {current_poi_id}
+- Cuenta una historia mágica y apropiada para la edad
+
+HISTORIAS DISPONIBLES:
+{stories}"""
+        
+        return situation_context
+    
+    def _build_conversation_context(self, context: FamilyContext) -> str:
+        """
+        Construye contexto conversacional
+        """
+        if not context.conversation_history:
+            return ""
+        
+        # Resumen de la conversación reciente
+        recent = context.get_recent_messages(2)
+        if not recent:
+            return ""
+        
+        context_parts = ["CONTEXTO CONVERSACIONAL RECIENTE:"]
+        
+        for i, exchange in enumerate(recent, 1):
+            user_msg = exchange.get("user_message", "")[:100]
+            agent_msg = exchange.get("agent_response", "")[:100]
+            speaker = exchange.get("speaker", "Familia")
+            
+            context_parts.append(f"{i}. {speaker}: {user_msg}")
+            context_parts.append(f"   Tú respondiste: {agent_msg}...")
+        
+        # POIs visitados
+        if context.visited_pois:
+            visited_names = [poi.get("poi_name", "POI") for poi in context.visited_pois[-3:]]
+            context_parts.append(f"POIs visitados recientemente: {', '.join(visited_names)}")
+        
+        return "\n".join(context_parts)
+    
+    def _get_fallback_response(self, context: FamilyContext, situation: Dict[str, Any]) -> str:
+        """
+        Respuesta de emergencia si falla el LLM
+        """
+        if situation["type"] == "poi_arrival":
+            poi_name = situation["data"].get("poi_name", "este lugar")
+            return f"¡Fantástico, {context.get_personalized_greeting()}! Habéis llegado a {poi_name}. ¡Qué emocionante! 🐭✨"
+        
+        elif situation["type"] == "navigation":
+            return f"¡Por supuesto! Os ayudo a llegar al siguiente lugar mágico de Madrid. 🗺️✨"
+        
+        else:
+            return f"¡Hola, {context.get_personalized_greeting()}! ¿En qué puedo ayudaros en vuestra aventura por Madrid? 🐭✨"
+    
+    async def _update_context_improved(self, context: FamilyContext, user_message: str,
                                      agent_response: str, speaker_name: Optional[str],
                                      points_result: Dict[str, Any], situation: Dict[str, Any]):
-        """Actualiza contexto y lo guarda en BD real"""
-        
-        # Actualizar memoria conversacional
+        """
+        Actualiza contexto con lógica mejorada
+        """
+        # 1. Actualizar memoria conversacional
         context.add_conversation(user_message, agent_response, speaker_name)
         
-        # Actualizar puntos
+        # 2. Actualizar puntos SOLO si se otorgaron
         points_earned = points_result.get("points_earned", 0)
         if points_earned > 0:
             context.total_points += points_earned
+            logger.info(f"💰 Puntos actualizados: +{points_earned} = {context.total_points} total")
         
-        # Actualizar progreso si llegaron a POI
+        # 3. Actualizar progreso de ruta si llegaron a POI
         if situation["type"] == "poi_arrival":
             poi_data = situation["data"]
-            context.current_poi_index = max(context.current_poi_index, 
-                                          poi_data.get("poi_index", 0) + 1)
+            poi_id = poi_data.get("poi_id")
+            poi_name = poi_data.get("poi_name")
+            poi_index = poi_data.get("poi_index", 0)
+            
+            # Agregar POI como visitado
+            context.add_visited_poi({
+                "poi_id": poi_id,
+                "poi_name": poi_name,
+                "poi_index": poi_index,
+                "points": points_earned
+            })
+            
+            # Actualizar índice de POI actual
+            context.current_poi_index = max(context.current_poi_index, poi_index + 1)
+            logger.info(f"🗺️ Progreso actualizado: POI {poi_index} visitado, siguiente: {context.current_poi_index}")
         
-        # Guardar en BD real
-        await save_family_context(context, self.db)
-    
-    def _should_ask_question_at_poi(self, context: FamilyContext, poi_id: str) -> bool:
-        """Determina si debe hacer una pregunta en este POI"""
-        
-        # No hacer pregunta si ya respondieron una en este POI
-        if context.has_earned_poi_points(poi_id, "question"):
-            return False
-        
-        # No hacer pregunta en la primera llegada (solo celebrar)
-        poi_visits = [p for p in context.visited_pois if p.get("poi_id") == poi_id]
-        if not poi_visits:
-            return False  # Primera vez aquí
-        
-        # Hacer pregunta si han mostrado engagement previo en este POI
-        if context.has_earned_poi_points(poi_id, "engagement"):
-            return True
-        
-        # O si han visitado al menos 2 POIs (están comprometidos con la ruta)
-        return len(context.visited_pois) >= 2
-    
-    def _get_poi_question(self, poi_id: str, language: str) -> str:
-        """Obtiene pregunta específica para cada POI"""
-        
-        questions = {
-            "plaza_mayor": {
-                "es": "¿Sabéis cómo se llamaba esta plaza antes de ser Plaza Mayor?",
-                "en": "Do you know what this square was called before it became Plaza Mayor?"
-            },
-            "palacio_real": {
-                "es": "¿Adiviináis cuántas habitaciones tiene este enorme palacio?",
-                "en": "Can you guess how many rooms this enormous palace has?"
-            },
-            "puerta_del_sol": {
-                "es": "¿Sabéis qué símbolo especial hay en el suelo de esta plaza?",
-                "en": "Do you know what special symbol is on the floor of this square?"
-            },
-            "mercado_san_miguel": {
-                "es": "¿De qué material especial está hecho este mercado?",
-                "en": "What special material is this market made of?"
-            },
-            "teatro_real": {
-                "es": "¿Qué tipo de espectáculos mágicos se representan aquí?",
-                "en": "What kind of magical shows are performed here?"
-            }
-        }
-        
-        poi_questions = questions.get(poi_id, {})
-        return poi_questions.get(language, poi_questions.get("es", "¿Qué os parece este lugar tan especial?"))
+        # 4. Guardar en BD
+        try:
+            await save_family_context(context, self.db)
+            logger.info("💾 Contexto guardado en BD exitosamente")
+        except Exception as e:
+            logger.error(f"❌ Error guardando contexto: {e}")
+            # No fallar por esto, continuar
     
     # Métodos auxiliares para endpoints
-    
     async def get_family_progress(self, family_id: int) -> Dict[str, Any]:
-        """Obtiene progreso de una familia"""
+        """Obtiene progreso detallado de una familia"""
         try:
-            context = await load_family_context(family_id)
+            context = await load_family_context(family_id, self.db)
             return {
                 "family_name": context.family_name,
                 "total_points": context.total_points,
                 "current_poi": context.current_poi_index,
                 "visited_pois": len(context.visited_pois),
-                "completion_percentage": (len(context.visited_pois) / 5) * 100,
+                "completion_percentage": (len(context.visited_pois) / 10) * 100,  # Actualizado a 10 POIs
                 "recent_conversation": context.get_recent_messages(3)
             }
         except Exception as e:
+            logger.error(f"❌ Error obteniendo progreso: {e}")
             return {"error": f"Error obteniendo progreso: {str(e)}"}
     
     async def suggest_next_destination(self, family_id: int) -> Dict[str, Any]:
-        """Sugiere próximo destino"""
+        """Sugiere próximo destino con información completa"""
         try:
-            context = await load_family_context(family_id)
+            context = await load_family_context(family_id, self.db)
             suggestion = get_next_poi(context.current_poi_index, context.current_location)
             return suggestion
         except Exception as e:
+            logger.error(f"❌ Error sugiriendo destino: {e}")
             return {"error": f"Error sugiriendo destino: {str(e)}"}
 
 
@@ -422,21 +543,21 @@ async def process_chat_message(family_id: int, message: str,
                              location: Optional[Dict] = None,
                              speaker_name: Optional[str] = None,
                              db=None) -> Dict[str, Any]:
-    """Procesa mensaje de chat con BD"""
+    """Procesa mensaje de chat - versión final corregida"""
     global raton_perez
     if not raton_perez:
         raton_perez = RatonPerez(db)
     return await raton_perez.chat(family_id, message, location, speaker_name)
 
 async def get_family_status(family_id: int, db) -> Dict[str, Any]:
-    """Obtiene estado familiar con BD"""
+    """Obtiene estado familiar completo"""
     global raton_perez
     if not raton_perez:
         raton_perez = RatonPerez(db)
     return await raton_perez.get_family_progress(family_id)
 
 async def get_next_destination(family_id: int, db) -> Dict[str, Any]:
-    """Obtiene siguiente destino con BD"""
+    """Obtiene siguiente destino recomendado"""
     global raton_perez
     if not raton_perez:
         raton_perez = RatonPerez(db)

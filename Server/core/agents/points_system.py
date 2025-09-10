@@ -1,32 +1,31 @@
 """
 Points System - Sistema de puntos y gamificación
-275 puntos máximo por POI: 100 llegada + 75 engagement + 100 pregunta
+Lógica clara: 100 llegada + 75 engagement + 100 pregunta = 275 max por POI
 """
 
 from typing import Dict, Any, List
 from Server.core.agents.family_context import FamilyContext
+import logging
 
+logger = logging.getLogger(__name__)
 
-# Configuración de puntos
+# Configuración de puntos 
 POINTS_CONFIG = {
-    "arrival": 100,      # Puntos por llegar a cualquier POI
-    "engagement": 75,    # Puntos por engagement en cualquier POI
-    "question": 100      # Puntos por responder pregunta en cualquier POI
+    "arrival": 100,      # Solo por llegar la primera vez a un POI
+    "engagement": 50,    # Por mostrar interés en un POI
+    "question": 75,      # Por responder pregunta en un POI 
+    "general_chat": 25   # Chat inicial sin POI
 }
 
 REJECTION_KEYWORDS = {
-    "es": ["no sé", "no lo sé", "paso", "siguiente", "no me interesa"],
-    "en": ["don't know", "i don't know", "skip", "next", "not interested"]
+    "es": ["no sé", "no lo sé", "paso", "siguiente", "no me interesa", "no quiero"],
+    "en": ["don't know", "i don't know", "skip", "next", "not interested", "don't want"]
 }
 
 
 def evaluate_points(context: FamilyContext, message: str, situation: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Evalúa y otorga puntos según la situación
-    Máximo 275 puntos por POI: 100 + 75 + 100
-    
-    Returns:
-        Dict con puntos ganados, achievements y mensajes
+    Evalúa y otorga puntos según la situación 
     """
     result = {
         "points_earned": 0,
@@ -34,268 +33,270 @@ def evaluate_points(context: FamilyContext, message: str, situation: Dict[str, A
         "messages": []
     }
     
-    # Puntos por llegada a POI
-    if situation["type"] == "poi_arrival":
-        poi_points = _evaluate_poi_arrival(context, situation["data"])
-        result["points_earned"] += poi_points["points"]
-        result["achievements"].extend(poi_points["achievements"])
-        result["messages"].extend(poi_points["messages"])
+    logger.info(f"🔍 Evaluando puntos - Situación: {situation['type']}, POI actual: {situation.get('current_poi_id')}")
     
-    # Puntos por engagement en POI específico
+    # 1. SOLO puntos por llegada si es poi_arrival
+    if situation["type"] == "poi_arrival":
+        arrival_points = _evaluate_arrival_points(context, situation)
+        result["points_earned"] += arrival_points["points"]
+        result["achievements"].extend(arrival_points["achievements"])
+        result["messages"].extend(arrival_points["messages"])
+        logger.info(f"✅ Puntos por llegada: {arrival_points['points']}")
+        return result  # SOLO puntos de llegada, no más
+    
+    # 2. Puntos por engagement SOLO si estamos en un POI específico
     current_poi_id = situation.get("current_poi_id")
     if current_poi_id:
-        engagement_points = _evaluate_poi_specific_engagement(context, message, current_poi_id)
+        engagement_points = _evaluate_engagement_points(context, message, current_poi_id)
         result["points_earned"] += engagement_points["points"]
         result["achievements"].extend(engagement_points["achievements"])
         result["messages"].extend(engagement_points["messages"])
-        
-        # Puntos por pregunta específica del POI
-        question_points = _evaluate_poi_specific_question(context, message, current_poi_id, situation)
+        logger.info(f"✅ Puntos por engagement en {current_poi_id}: {engagement_points['points']}")
+    
+    # 3. Puntos por pregunta SOLO si es una situación de pregunta/respuesta
+    if situation["type"] in ["location_question", "poi_question"] and current_poi_id:
+        question_points = _evaluate_question_points(context, message, current_poi_id)
         result["points_earned"] += question_points["points"]
         result["achievements"].extend(question_points["achievements"])
         result["messages"].extend(question_points["messages"])
-    else:
-        # Solo en conversación inicial sin POI
-        if situation["type"] == "general_chat" and len(context.conversation_history) == 0:
-            engagement_points = _evaluate_general_engagement(context, message)
-            result["points_earned"] += engagement_points["points"]
-            result["achievements"].extend(engagement_points["achievements"])
-            result["messages"].extend(engagement_points["messages"])
+        logger.info(f"✅ Puntos por pregunta en {current_poi_id}: {question_points['points']}")
     
+    # 4. Puntos mínimos por chat inicial (solo primera vez)
+    elif situation["type"] == "general_chat" and not current_poi_id and len(context.conversation_history) == 0:
+        initial_points = _evaluate_initial_chat(context, message)
+        result["points_earned"] += initial_points["points"]
+        result["achievements"].extend(initial_points["achievements"])
+        result["messages"].extend(initial_points["messages"])
+        logger.info(f"✅ Puntos por chat inicial: {initial_points['points']}")
+    
+    logger.info(f"📊 Total puntos otorgados: {result['points_earned']}")
     return result
 
 
-def _evaluate_poi_arrival(context: FamilyContext, poi_data: Dict[str, Any]) -> Dict[str, Any]:
+def _evaluate_arrival_points(context: FamilyContext, situation: Dict[str, Any]) -> Dict[str, Any]:
     """Evalúa puntos por llegar a un POI - SOLO PRIMERA VEZ"""
     
-    poi_id = poi_data.get("poi_id", "")
-    poi_name = poi_data.get("poi_name", "")
-    poi_index = poi_data.get("poi_index", 0)
+    poi_id = situation["data"].get("poi_id", "")
+    poi_name = situation["data"].get("poi_name", "")
     
-    # Crear o obtener registro del POI ANTES de verificar puntos
-    poi_record = context.get_or_create_poi_record(poi_id, poi_name, poi_index)
-    
-    # Verificar si ya ganaron puntos de llegada
-    if poi_record["points_awarded"]["arrival"]:
+    if not poi_id:
+        logger.warning("⚠️ No POI ID en arrival")
         return {"points": 0, "achievements": [], "messages": []}
     
+    # Verificar si ya ganaron puntos de llegada en este POI
+    if context.has_earned_poi_points(poi_id, "arrival"):
+        logger.info(f"ℹ️ Ya se otorgaron puntos de llegada en {poi_id}")
+        return {"points": 0, "achievements": [], "messages": []}
+    
+    # Crear/obtener registro del POI
+    poi_record = context.get_or_create_poi_record(poi_id, poi_name)
+    
     # Marcar puntos de llegada como otorgados
-    poi_record["points_awarded"]["arrival"] = True
+    context.mark_poi_points_earned(poi_id, "arrival")
     
-    # Puntos fijos por llegada a cualquier POI
-    poi_points = POINTS_CONFIG["arrival"]
-    
+    points = POINTS_CONFIG["arrival"]
     achievements = ["location_visit"]
-    messages = [_get_poi_message(poi_id, context.language)]
+    messages = [_get_arrival_message(poi_name)]
+    
+    logger.info(f"🎯 Otorgados {points} puntos por llegar a {poi_name}")
     
     return {
-        "points": poi_points,
+        "points": points,
         "achievements": achievements,
         "messages": messages
     }
 
 
-def _evaluate_poi_specific_engagement(context: FamilyContext, message: str, poi_id: str) -> Dict[str, Any]:
-    """Evalúa engagement específico en un POI - SOLO PRIMERA VEZ POR POI"""
-    
-    # Asegurar que el POI existe antes de verificar
-    poi_record = context.get_or_create_poi_record(poi_id)
+def _evaluate_engagement_points(context: FamilyContext, message: str, poi_id: str) -> Dict[str, Any]:
+    """Evalúa puntos por engagement en POI - LÓGICA MEJORADA"""
     
     # Verificar si ya ganaron puntos de engagement en este POI
-    if poi_record["points_awarded"]["engagement"]:
+    if context.has_earned_poi_points(poi_id, "engagement"):
+        logger.info(f"ℹ️ Ya se otorgaron puntos de engagement en {poi_id}")
         return {"points": 0, "achievements": [], "messages": []}
     
-    message_lower = message.lower()
-    language_key = "es" if context.language == "es" else "en"
+    message_lower = message.lower().strip()
     
-    result = {"points": 0, "achievements": [], "messages": []}
-    
-    # Detectar rechazo directo
-    rejection_words = REJECTION_KEYWORDS[language_key]
+    # Filtrar rechazos explícitos
+    rejection_words = REJECTION_KEYWORDS.get(context.language, REJECTION_KEYWORDS["es"])
     is_rejection = any(word in message_lower for word in rejection_words)
     
-    # CUALQUIER mensaje no vacío y no rechazo = engagement EN ESTE POI
-    if len(message.strip()) > 2 and not is_rejection:
-        result["points"] += POINTS_CONFIG["engagement"]
-        result["achievements"].append("poi_engagement")
-        result["messages"].append(_get_poi_engagement_message(poi_id, context.language))
+    if is_rejection or len(message_lower) < 5:
+        logger.info(f"ℹ️ Mensaje rechazado o muy corto: '{message_lower}'")
+        return {"points": 0, "achievements": [], "messages": []}
+    
+    # Palabras que indican engagement genuino
+    engagement_words = [
+        "increíble", "fascinante", "interesante", "genial", "wow", "impresionante",
+        "me gusta", "que bonito", "que bien", "amazing", "interesting", "cool"
+    ]
+    
+    has_engagement = any(word in message_lower for word in engagement_words)
+    message_length = len(message_lower.split())
+    
+    # Solo dar puntos si hay engagement real O mensaje largo (>8 palabras)
+    if has_engagement or message_length > 8:
+        # Marcar como otorgado
+        context.mark_poi_points_earned(poi_id, "engagement")
         
-        # Marcar como otorgado DIRECTAMENTE en el registro
-        poi_record["points_awarded"]["engagement"] = True
+        points = POINTS_CONFIG["engagement"]
+        achievements = ["poi_engagement"]
+        messages = [_get_engagement_message(poi_id)]
+        
+        logger.info(f"🎯 Otorgados {points} puntos por engagement en {poi_id}")
+        
+        return {
+            "points": points,
+            "achievements": achievements,
+            "messages": messages
+        }
     
-    return result
+    logger.info(f"ℹ️ No hay engagement suficiente: '{message_lower}'")
+    return {"points": 0, "achievements": [], "messages": []}
 
 
-def _evaluate_poi_specific_question(context: FamilyContext, message: str, poi_id: str, situation: Dict[str, Any]) -> Dict[str, Any]:
-    """Evalúa respuesta a pregunta específica del POI - SOLO PRIMERA VEZ POR POI"""
-    
-    # Asegurar que el POI existe antes de verificar
-    poi_record = context.get_or_create_poi_record(poi_id)
+def _evaluate_question_points(context: FamilyContext, message: str, poi_id: str) -> Dict[str, Any]:
+    """Evalúa puntos por responder preguntas en POI"""
     
     # Verificar si ya ganaron puntos de pregunta en este POI
-    if poi_record["points_awarded"]["question"]:
+    if context.has_earned_poi_points(poi_id, "question"):
+        logger.info(f"ℹ️ Ya se otorgaron puntos de pregunta en {poi_id}")
         return {"points": 0, "achievements": [], "messages": []}
     
-    # Solo evaluar si es una situación de pregunta/respuesta
-    if situation["type"] not in ["location_question", "story_request", "poi_question"]:
+    message_lower = message.lower().strip()
+    
+    # Filtrar rechazos
+    rejection_words = REJECTION_KEYWORDS.get(context.language, REJECTION_KEYWORDS["es"])
+    is_rejection = any(word in message_lower for word in rejection_words)
+    
+    if is_rejection or len(message_lower) < 3:
         return {"points": 0, "achievements": [], "messages": []}
     
-    message_lower = message.lower()
-    language_key = "es" if context.language == "es" else "en"
+    # Verificar que realmente hay una pregunta en el contexto reciente
+    recent_agent_messages = [msg.get("agent_response", "") for msg in context.get_recent_messages(2)]
+    has_question_context = any("?" in msg for msg in recent_agent_messages)
     
-    # Detectar rechazo directo
-    rejection_words = REJECTION_KEYWORDS[language_key]
-    is_rejection = any(word in message_lower for word in rejection_words)
+    if has_question_context:
+        # Marcar como otorgado
+        context.mark_poi_points_earned(poi_id, "question")
+        
+        points = POINTS_CONFIG["question"]
+        achievements = ["poi_question_answered"]
+        messages = [_get_question_message(poi_id)]
+        
+        logger.info(f"🎯 Otorgados {points} puntos por responder pregunta en {poi_id}")
+        
+        return {
+            "points": points,
+            "achievements": achievements,
+            "messages": messages
+        }
     
-    result = {"points": 0, "achievements": [], "messages": []}
-    
-    # Si hay participación genuina (no rechazo) y hay "?" en el contexto
-    if not is_rejection and len(message.strip()) > 2:
-        # Verificar si es realmente una respuesta a pregunta del POI
-        if "?" in message or _is_poi_question_context(context, poi_id):
-            result["points"] += POINTS_CONFIG["question"]
-            result["achievements"].append("poi_question_answered")
-            result["messages"].append(_get_poi_question_message(poi_id, context.language))
-            
-            # Marcar como otorgado DIRECTAMENTE en el registro
-            poi_record["points_awarded"]["question"] = True
-    
-    return result
+    return {"points": 0, "achievements": [], "messages": []}
 
 
-def _evaluate_general_engagement(context: FamilyContext, message: str) -> Dict[str, Any]:
-    """Evalúa engagement general para conversaciones iniciales sin POI"""
+def _evaluate_initial_chat(context: FamilyContext, message: str) -> Dict[str, Any]:
+    """Evalúa puntos por chat inicial - SOLO PRIMERA VEZ"""
     
-    message_lower = message.lower()
-    language_key = "es" if context.language == "es" else "en"
+    message_lower = message.lower().strip()
     
-    result = {"points": 0, "achievements": [], "messages": []}
+    # Solo saludos básicos
+    greetings = ["hola", "hello", "buenas", "hey", "saludos"]
+    is_greeting = any(greeting in message_lower for greeting in greetings)
     
-    # Detectar rechazo directo
-    rejection_words = REJECTION_KEYWORDS[language_key]
-    is_rejection = any(word in message_lower for word in rejection_words)
+    if is_greeting and len(message_lower) > 3:
+        points = POINTS_CONFIG["general_chat"]
+        achievements = ["initial_contact"]
+        messages = ["¡Bienvenidos a Madrid!"]
+        
+        logger.info(f"🎯 Otorgados {points} puntos por saludo inicial")
+        
+        return {
+            "points": points,
+            "achievements": achievements,
+            "messages": messages
+        }
     
-    # Solo en primera interacción y si hay engagement
-    if len(message.strip()) > 10 and not is_rejection:
-        # Puntos mínimos por engagement inicial
-        result["points"] += 25
-        result["achievements"].append("initial_engagement")
-        result["messages"].append(_get_initial_engagement_message(context.language))
-    
-    return result
-
-
-def _is_poi_question_context(context: FamilyContext, poi_id: str) -> bool:
-    """Verifica si el contexto reciente incluye una pregunta sobre este POI"""
-    recent_messages = context.get_recent_messages(2)
-    for exchange in recent_messages:
-        agent_response = exchange.get("agent_response", "")
-        if "?" in agent_response and poi_id in str(exchange):
-            return True
-    return False
-
-
-def get_celebration_message(points_result: Dict[str, Any], language: str = "es") -> str:
-    """Genera mensaje de celebración simplificado"""
-    
-    messages = points_result.get("messages", [])
-    points_earned = points_result.get("points_earned", 0)
-    
-    if not messages and points_earned == 0:
-        return ""
-    
-    # Combinar mensajes existentes
-    celebration = " ".join(messages)
-    
-    # Añadir puntos ganados en esta interacción
-    if points_earned > 0:
-        if language == "es":
-            celebration += f"\n\n✨ ¡Habéis ganado {points_earned} puntos mágicos! ✨"
-        else:
-            celebration += f"\n\n✨ You've earned {points_earned} magical points! ✨"
-    
-    return celebration
+    return {"points": 0, "achievements": [], "messages": []}
 
 
 # Funciones de mensajes
-def _get_poi_message(poi_id: str, language: str) -> str:
-    """Mensaje específico por POI"""
+def _get_arrival_message(poi_name: str) -> str:
+    """Mensaje por llegar a POI"""
     messages = {
-        "plaza_mayor": {
-            "es": "¡Fantástico! Habéis descubierto la Plaza Mayor, el corazón de Madrid.",
-            "en": "Fantastic! You've discovered Plaza Mayor, the heart of Madrid."
-        },
-        "mercado_san_miguel": {
-            "es": "¡Increíble! El Mercado de San Miguel guarda secretos deliciosos.",
-            "en": "Incredible! San Miguel Market holds delicious secrets."
-        },
-        "palacio_real": {
-            "es": "¡Magnífico! El Palacio Real es una joya arquitectónica.",
-            "en": "Magnificent! The Royal Palace is an architectural jewel."
-        },
-        "teatro_real": {
-            "es": "¡Espléndido! El Teatro Real resuena con historias mágicas.",
-            "en": "Splendid! The Royal Theatre resonates with magical stories."
-        },
-        "puerta_del_sol": {
-            "es": "¡Extraordinario! La Puerta del Sol es el kilómetro cero de España.",
-            "en": "Extraordinary! Puerta del Sol is Spain's kilometer zero."
-        }
+        "Plaza Mayor": "¡Fantástico! Habéis descubierto la Plaza Mayor, el corazón de Madrid.",
+        "Mercado de San Miguel": "¡Increíble! El Mercado de San Miguel os espera con sus delicias.",
+        "Palacio Real": "¡Magnífico! El Palacio Real se alza majestuoso ante vosotros.",
+        "Teatro Real": "¡Espléndido! El Teatro Real resuena con historias mágicas.",
+        "Puerta del Sol": "¡Extraordinario! Habéis llegado al kilómetro cero de España."
     }
     
-    default = {
-        "es": "¡Fantástico! Habéis descubierto una ubicación especial.",
-        "en": "Fantastic! You've discovered a special location."
-    }
+    return messages.get(poi_name, f"¡Fantástico! Habéis descubierto {poi_name}.")
+
+
+def _get_engagement_message(poi_id: str) -> str:
+    """Mensaje por engagement"""
+    return "¡Me encanta vuestra curiosidad sobre este lugar especial!"
+
+
+def _get_question_message(poi_id: str) -> str:
+    """Mensaje por responder pregunta"""
+    return "¡Excelente participación! Conocéis bien este lugar."
+
+
+def get_celebration_message(points_result: Dict[str, Any], language: str = "es") -> str:
+    """Genera mensaje de celebración moderado"""
     
-    return messages.get(poi_id, default)[language]
-
-
-def _get_poi_engagement_message(poi_id: str, language: str) -> str:
-    """Mensaje por engagement específico en POI"""
-    if language == "es":
-        return "¡Me encanta vuestra curiosidad sobre este lugar especial!"
-    else:
-        return "I love your curiosity about this special place!"
-
-
-def _get_poi_question_message(poi_id: str, language: str) -> str:
-    """Mensaje por responder pregunta específica del POI"""
-    if language == "es":
-        return "¡Excelente respuesta! Conocéis bien los secretos de este lugar."
-    else:
-        return "Excellent answer! You know the secrets of this place well."
-
-
-def _get_initial_engagement_message(language: str) -> str:
-    """Mensaje por engagement inicial sin POI"""
-    if language == "es":
-        return "¡Bienvenidos aventureros! Me alegra conoceros."
-    else:
-        return "Welcome adventurers! I'm happy to meet you."
+    points_earned = points_result.get("points_earned", 0)
+    messages = points_result.get("messages", [])
+    
+    if points_earned == 0 and not messages:
+        return ""
+    
+    celebration_parts = []
+    
+    # Mensajes específicos
+    if messages:
+        celebration_parts.extend(messages)
+    
+    # Puntos (solo si son significativos)
+    if points_earned > 0:
+        if language == "es":
+            celebration_parts.append(f"✨ ¡+{points_earned} puntos mágicos! ✨")
+        else:
+            celebration_parts.append(f"✨ +{points_earned} magical points! ✨")
+    
+    return "\n".join(celebration_parts)
 
 
 def check_milestone_achievement(context: FamilyContext) -> Dict[str, Any]:
-    """Verifica si han alcanzado algún hito especial"""
+    """Verifica hitos - MÁS CONSERVADOR"""
     
     total_points = context.total_points
     achievements = []
     messages = []
     
-    # Hitos por puntos totales simplificados
-    if total_points >= 1000:
-        achievements.append("point_master")
+    # Hitos más realistas
+    if total_points >= 500:
+        achievements.append("madrid_expert")
         if context.language == "es":
-            messages.append("¡Sois maestros de los puntos! ¡Más de 1000 puntos mágicos!")
+            messages.append("¡Sois unos expertos de Madrid! ¡Más de 500 puntos!")
         else:
-            messages.append("You're point masters! Over 1000 magical points!")
+            messages.append("You're Madrid experts! Over 500 points!")
     
-    elif total_points >= 500:
-        achievements.append("point_explorer")
+    elif total_points >= 250:
+        achievements.append("madrid_explorer")
         if context.language == "es":
-            messages.append("¡Grandes exploradores! ¡Habéis superado los 500 puntos!")
+            messages.append("¡Grandes exploradores! ¡Habéis superado los 250 puntos!")
         else:
-            messages.append("Great explorers! You've passed 500 points!")
+            messages.append("Great explorers! You've passed 250 points!")
+    
+    elif total_points >= 100:
+        achievements.append("first_steps")
+        if context.language == "es":
+            messages.append("¡Buen comienzo! ¡Ya tenéis 100 puntos!")
+        else:
+            messages.append("Good start! You have 100 points!")
     
     return {
         "achievements": achievements,
