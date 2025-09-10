@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Navigation from '../components/Navigation';
+import SnapMapView from '../components/InteractiveMap';
 import { 
   FiMapPin, 
   FiNavigation, 
@@ -35,6 +36,8 @@ const Gymkana = () => {
   const [activePlace, setActivePlace] = useState(null);
   const [routeMode, setRouteMode] = useState('official'); // 'official' or 'nearest'
   const [showMapEmbed, setShowMapEmbed] = useState(false);
+  const [selectedDestination, setSelectedDestination] = useState(null);
+  const [mapViewMode, setMapViewMode] = useState('list'); // 'list' or 'map'
 
   // Lugares oficiales de la ruta del Ratoncito Pérez con coordenadas reales
   const officialPlaces = [
@@ -209,7 +212,41 @@ const Gymkana = () => {
   };
 
   useEffect(() => {
-    getCurrentLocation();
+    const getUserLocation = () => {
+      setIsLoadingLocation(true);
+      
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setUserLocation({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            });
+            setIsLoadingLocation(false);
+          },
+          (error) => {
+            console.log('Geolocation error:', error);
+            // ✅ FALLBACK: Usar ubicación mock en Madrid
+            setUserLocation({
+              lat: 40.4168, // Puerta del Sol (centro de Madrid)
+              lng: -3.7038
+            });
+            setLocationError('Usando ubicación de ejemplo en Madrid');
+            setIsLoadingLocation(false);
+          }
+        );
+      } else {
+        // ✅ FALLBACK: Usar ubicación mock si no hay soporte
+        setUserLocation({
+          lat: 40.4168,
+          lng: -3.7038
+        });
+        setLocationError('Geolocalización no disponible - usando ubicación de ejemplo');
+        setIsLoadingLocation(false);
+      }
+    };
+
+    getUserLocation();
   }, []);
 
   const getDisplayedPlaces = () => {
@@ -272,69 +309,72 @@ const Gymkana = () => {
           </div>
         </div>
 
-        {/* Selector de Ruta y Mapa */}
+        {/* Map/List Toggle */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-amber-100">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-800">Explorar Madrid</h3>
-            <div className="flex items-center space-x-2">
+            <div className="flex bg-gray-100 rounded-xl p-1">
               <button
-                onClick={() => setShowMapEmbed(!showMapEmbed)}
-                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                  showMapEmbed 
-                    ? 'bg-amber-500 text-white' 
-                    : 'bg-amber-100 text-amber-600 hover:bg-amber-200'
+                onClick={() => setMapViewMode('list')}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                  mapViewMode === 'list' 
+                    ? 'bg-white text-amber-600 shadow-sm' 
+                    : 'text-gray-600 hover:text-amber-600'
                 }`}
               >
-                <FiMap className="inline mr-1" size={14} />
+                Lista
+              </button>
+              <button
+                onClick={() => setMapViewMode('map')}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                  mapViewMode === 'map' 
+                    ? 'bg-white text-amber-600 shadow-sm' 
+                    : 'text-gray-600 hover:text-amber-600'
+                }`}
+              >
                 Mapa
               </button>
             </div>
           </div>
 
-          {/* Selector de Tipo de Ruta */}
-          <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
-            <button
-              onClick={() => setRouteMode('official')}
-              className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
-                routeMode === 'official'
-                  ? 'bg-white text-amber-600 shadow-sm'
-                  : 'text-gray-600 hover:text-amber-600'
-              }`}
-            >
-              Ruta Oficial
-            </button>
-            <button
-              onClick={() => setRouteMode('nearest')}
-              className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
-                routeMode === 'nearest'
-                  ? 'bg-white text-amber-600 shadow-sm'
-                  : 'text-gray-600 hover:text-amber-600'
-              }`}
-            >
-              Más Cercanos
-            </button>
-          </div>
-
-          {/* Embed de Google Maps */}
-          {showMapEmbed && (
-            <div className="mb-4 rounded-xl overflow-hidden border-2 border-amber-200">
-              <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3037.6104486936345!2d-3.7067149247649657!3d40.41654497144158!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd42289637e3e23f%3A0x81bb596d04aab02a!2sCalle+del+Arenal%2C+8%2C+28013+Madrid!5e0!3m2!1sen!2ses!4v1234567890123"
-                width="100%"
-                height="300"
-                style={{ border: 0 }}
-                allowFullScreen=""
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                title="Mapa de Madrid - Ruta del Ratoncito Pérez"
+          {/* Interactive Map View */}
+          {mapViewMode === 'map' && (
+            <div className="h-[500px] rounded-2xl overflow-hidden border-2 border-amber-200">
+              <SnapMapView
+                places={displayedPlaces}
+                userLocation={userLocation}
+                selectedDestination={selectedDestination}
+                onDestinationSelect={setSelectedDestination}
               />
-              <div className="bg-amber-50 p-3 text-center">
-                <p className="text-sm text-amber-700">
-                  <FiMapPin className="inline mr-1" size={14} />
-                  Toca en cualquier ubicación para obtener direcciones
-                </p>
-              </div>
             </div>
+          )}
+
+          {/* Existing route selector for list view */}
+          {mapViewMode === 'list' && (
+            <>
+              <div className="flex bg-gray-100 rounded-xl p-1 mb-4">
+                <button
+                  onClick={() => setRouteMode('official')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                    routeMode === 'official'
+                      ? 'bg-white text-amber-600 shadow-sm'
+                      : 'text-gray-600 hover:text-amber-600'
+                  }`}
+                >
+                  Ruta Oficial
+                </button>
+                <button
+                  onClick={() => setRouteMode('nearest')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-medium text-sm transition-all ${
+                    routeMode === 'nearest'
+                      ? 'bg-white text-amber-600 shadow-sm'
+                      : 'text-gray-600 hover:text-amber-600'
+                  }`}
+                >
+                  Más Cercanos
+                </button>
+              </div>
+            </>
           )}
         </div>
 
@@ -364,135 +404,137 @@ const Gymkana = () => {
         )}
 
         {/* Lista de Lugares */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">
-              {routeMode === 'official' ? 'Ruta Oficial del Ratoncito' : 'Lugares más Cercanos'}
-            </h3>
-            <span className="text-sm text-gray-500">
-              {displayedPlaces.length} lugares
-            </span>
-          </div>
-          
-          <div className="space-y-4">
-            {displayedPlaces.map((place) => {
-              const distance = calculateDistance(place);
-              const isNear = isNearPlace(place);
-              const hasPhoto = savedPhotos[place.id];
-              
-              return (
-                <div 
-                  key={place.id} 
-                  className={`bg-white rounded-2xl p-6 shadow-sm border-2 transition-all ${
-                    place.visited ? 'border-green-200 bg-green-50' : 
-                    isNear ? 'border-amber-400 bg-amber-50' : 
-                    'border-gray-200 hover:border-amber-300'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h4 className="font-bold text-gray-800 text-lg">{place.name}</h4>
-                        {place.visited && <FiCheckCircle className="text-green-500" size={20} />}
-                        {hasPhoto && (
-                          <div className="bg-purple-100 p-1 rounded-full">
-                            <FiImage className="text-purple-600" size={16} />
-                          </div>
-                        )}
-                        {isNear && (
-                          <div className="bg-amber-100 px-2 py-1 rounded-full">
-                            <span className="text-xs font-medium text-amber-700">Cerca</span>
-                          </div>
-                        )}
+        {mapViewMode === 'list' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">
+                {routeMode === 'official' ? 'Ruta Oficial del Ratoncito' : 'Lugares más Cercanos'}
+              </h3>
+              <span className="text-sm text-gray-500">
+                {displayedPlaces.length} lugares
+              </span>
+            </div>
+            
+            <div className="space-y-4">
+              {displayedPlaces.map((place) => {
+                const distance = calculateDistance(place);
+                const isNear = isNearPlace(place);
+                const hasPhoto = savedPhotos[place.id];
+                
+                return (
+                  <div 
+                    key={place.id} 
+                    className={`bg-white rounded-2xl p-6 shadow-sm border-2 transition-all ${
+                      place.visited ? 'border-green-200 bg-green-50' : 
+                      isNear ? 'border-amber-400 bg-amber-50' : 
+                      'border-gray-200 hover:border-amber-300'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <h4 className="font-bold text-gray-800 text-lg">{place.name}</h4>
+                          {place.visited && <FiCheckCircle className="text-green-500" size={20} />}
+                          {hasPhoto && (
+                            <div className="bg-purple-100 p-1 rounded-full">
+                              <FiImage className="text-purple-600" size={16} />
+                            </div>
+                          )}
+                          {isNear && (
+                            <div className="bg-amber-100 px-2 py-1 rounded-full">
+                              <span className="text-xs font-medium text-amber-700">Cerca</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">{place.address}</p>
+                        <p className="text-sm text-gray-700 mb-3">{place.description}</p>
                       </div>
-                      <p className="text-sm text-gray-600 mb-2">{place.address}</p>
-                      <p className="text-sm text-gray-700 mb-3">{place.description}</p>
+                      
+                      {/* Distance and Points */}
+                      <div className="text-right ml-4">
+                        {distance !== null && (
+                          <div className="bg-gray-100 px-3 py-1 rounded-full mb-2">
+                            <span className="text-sm font-medium text-gray-700">
+                              {distance < 1000 ? `${distance}m` : `${(distance/1000).toFixed(1)}km`}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-1 text-amber-600">
+                          <FiStar size={16} />
+                          <span className="font-bold">{place.points}</span>
+                        </div>
+                      </div>
                     </div>
                     
-                    {/* Distance and Points */}
-                    <div className="text-right ml-4">
-                      {distance !== null && (
-                        <div className="bg-gray-100 px-3 py-1 rounded-full mb-2">
-                          <span className="text-sm font-medium text-gray-700">
-                            {distance < 1000 ? `${distance}m` : `${(distance/1000).toFixed(1)}km`}
-                          </span>
+                    {/* Details */}
+                    <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-1">
+                          <FiClock size={14} />
+                          <span>{place.estimatedTime}</span>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          place.difficulty === 'Fácil' ? 'bg-green-100 text-green-700' :
+                          place.difficulty === 'Medio' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {place.difficulty}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Recommendation */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                      <p className="text-sm text-gray-700">
+                        <strong className="text-amber-700">Recomendación:</strong> {place.tips}
+                      </p>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => openDirections(place)}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-medium text-sm transition-colors flex items-center justify-center space-x-2"
+                      >
+                        <FiNavigation size={16} />
+                        <span>Cómo llegar</span>
+                      </button>
+                      
+                      {isNear && (
+                        <>
+                          <button
+                            onClick={() => takePhoto(place)}
+                            className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-3 px-4 rounded-xl font-medium text-sm transition-colors flex items-center space-x-2"
+                          >
+                            <FiCamera size={16} />
+                            <span>Foto</span>
+                          </button>
+                          
+                          {!place.visited && (
+                            <button
+                              onClick={() => visitPlace(place)}
+                              className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white py-3 px-4 rounded-xl font-medium text-sm transition-colors flex items-center space-x-2"
+                            >
+                              <FiCheckCircle size={16} />
+                              <span>Marcar Visitado</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                      
+                      {place.visited && (
+                        <div className="bg-green-100 text-green-700 py-3 px-4 rounded-xl font-medium text-sm flex items-center space-x-2">
+                          <FiCheck size={16} />
+                          <span>Completado</span>
                         </div>
                       )}
-                      <div className="flex items-center space-x-1 text-amber-600">
-                        <FiStar size={16} />
-                        <span className="font-bold">{place.points}</span>
-                      </div>
                     </div>
                   </div>
-                  
-                  {/* Details */}
-                  <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-1">
-                        <FiClock size={14} />
-                        <span>{place.estimatedTime}</span>
-                      </div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        place.difficulty === 'Fácil' ? 'bg-green-100 text-green-700' :
-                        place.difficulty === 'Medio' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {place.difficulty}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Recommendation */}
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
-                    <p className="text-sm text-gray-700">
-                      <strong className="text-amber-700">Recomendación:</strong> {place.tips}
-                    </p>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={() => openDirections(place)}
-                      className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-medium text-sm transition-colors flex items-center justify-center space-x-2"
-                    >
-                      <FiNavigation size={16} />
-                      <span>Cómo llegar</span>
-                    </button>
-                    
-                    {isNear && (
-                      <>
-                        <button
-                          onClick={() => takePhoto(place)}
-                          className="bg-purple-100 hover:bg-purple-200 text-purple-700 py-3 px-4 rounded-xl font-medium text-sm transition-colors flex items-center space-x-2"
-                        >
-                          <FiCamera size={16} />
-                          <span>Foto</span>
-                        </button>
-                        
-                        {!place.visited && (
-                          <button
-                            onClick={() => visitPlace(place)}
-                            className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white py-3 px-4 rounded-xl font-medium text-sm transition-colors flex items-center space-x-2"
-                          >
-                            <FiCheckCircle size={16} />
-                            <span>Marcar Visitado</span>
-                          </button>
-                        )}
-                      </>
-                    )}
-                    
-                    {place.visited && (
-                      <div className="bg-green-100 text-green-700 py-3 px-4 rounded-xl font-medium text-sm flex items-center space-x-2">
-                        <FiCheck size={16} />
-                        <span>Completado</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Información Adicional */}
         <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl p-5 text-white shadow-lg">
