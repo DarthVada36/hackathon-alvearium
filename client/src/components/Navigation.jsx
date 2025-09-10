@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   FiMessageCircle, 
-  FiMap
+  FiMap,
+  FiHelpCircle
 } from 'react-icons/fi';
 
 const Navigation = () => {
@@ -39,6 +40,13 @@ const Navigation = () => {
               <FiMessageCircle className={`w-6 h-6 ${isActive('/chat') ? 'text-amber-600' : 'text-gray-600'}`} />
             </div>
             <span className={`text-xs mt-1 ${isActive('/chat') ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>Chat</span>
+          </Link>
+          
+          <Link to="/how-it-works" className="flex flex-col items-center p-2">
+            <div className={`p-2 rounded-lg ${isActive('/how-it-works') ? 'bg-amber-100' : 'hover:bg-gray-100'} transition-colors`}>
+              <FiHelpCircle className={`w-6 h-6 ${isActive('/how-it-works') ? 'text-amber-600' : 'text-gray-600'}`} />
+            </div>
+            <span className={`text-xs mt-1 ${isActive('/how-it-works') ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>Guía</span>
           </Link>
           
           <Link to="/profile" className="flex flex-col items-center p-2">

@@ -1,183 +1,258 @@
 import React from 'react';
 import Header from '../components/Header';
-import { FiMapPin, FiStar, FiTarget, FiSmartphone, FiAward, FiMessageCircle } from 'react-icons/fi';
+import Navigation from '../components/Navigation';
+import { 
+  FiMapPin, 
+  FiStar, 
+  FiTarget, 
+  FiMessageCircle, 
+  FiAward, 
+  FiCamera,
+  FiPlay,
+  FiShare,
+  FiGift,
+  FiHelpCircle,
+  FiNavigation,
+  FiDollarSign,
+  FiClock,
+  FiUsers,
+  FiSmartphone,
+  FiBook,
+  FiTruck,
+  FiCoffee,
+  FiBattery,
+  FiSun
+} from 'react-icons/fi';
+
+// Importar imagen del ratón
+import ratonSaco from '../assets/img/raton-saco.png';
 
 const HowItWorks = () => {
-  const steps = [
+  const guideSteps = [
     {
-      icon: <FiSmartphone size={40} />,
-      title: "Descarga y Regístrate",
-      description: "Crea tu cuenta en la app del Ratoncito Pérez y prepárate para explorar Madrid."
+      icon: <FiMapPin className="text-amber-600" size={32} />,
+      title: "Explora la Ruta Official",
+      description: "Visita los 6 lugares oficiales del Ratoncito Pérez en Madrid y gana entre 10-50 puntos por ubicación.",
+      points: "10-50 puntos"
     },
     {
-      icon: <FiMapPin size={40} />,
-      title: "Activa la Geolocalización",
-      description: "Permite que la app conozca tu ubicación para guiarte por los lugares más emblemáticos."
+      icon: <FiNavigation className="text-blue-600" size={32} />,
+      title: "Encuentra Lugares Cercanos",
+      description: "Usa la geolocalización para descubrir sitios históricos cerca de ti con recompensas especiales.",
+      points: "5-25 puntos"
     },
     {
-      icon: <FiTarget size={40} />,
-      title: "Sigue al Ratoncito",
-      description: "Nuestro guía virtual te llevará por la ruta oficial del Ratoncito Pérez en Madrid."
+      icon: <FiMessageCircle className="text-green-600" size={32} />,
+      title: "Usa el Chat Guía",
+      description: "Pregunta al Ratoncito sobre historia, direcciones y curiosidades de Madrid.",
+      points: "Gratis"
     },
     {
-      icon: <FiStar size={40} />,
-      title: "Gana Puntos",
-      description: "Visita los lugares oficiales de la ruta y acumula puntos por cada sitio descubierto."
-    },
-    {
-      icon: <FiMessageCircle size={40} />,
-      title: "Conversa y Aprende",
-      description: "Haz preguntas al Ratoncito sobre Madrid, su historia y cultura madrileña."
-    },
-    {
-      icon: <FiAward size={40} />,
-      title: "Desbloquea Logros",
-      description: "Consigue insignias y sube de nivel mientras completas tu aventura por Madrid."
+      icon: <FiCamera className="text-purple-600" size={32} />,
+      title: "Toma Fotos en Ubicaciones",
+      description: "Captura momentos especiales en cada lugar de la ruta y guárdalos en tu perfil.",
+      points: "2-5 puntos extra"
     }
   ];
 
-  const officialPlaces = [
-    "Casa del Ratoncito Pérez (Calle Arenal, 8)",
-    "Puerta del Sol",
-    "Plaza Mayor",
-    "Palacio Real",
-    "Teatro Real",
-    "Mercado de San Miguel",
-    "Plaza de Oriente",
-    "Catedral de la Almudena",
-    "Plaza de la Villa",
-    "Casa de la Panadería"
+  const bonusActivities = [
+    {
+      icon: <FiShare className="text-pink-500" size={28} />,
+      title: "Comparte en Instagram",
+      description: "Sube una foto taggeando @ratonperez_madrid",
+      reward: "+15 puntos",
+      color: "border-pink-200 bg-pink-50"
+    },
+    {
+      icon: <FiPlay className="text-indigo-500" size={28} />,
+      title: "Minijuegos en Ubicaciones",
+      description: "Encuentra códigos QR ocultos para juegos especiales",
+      reward: "+20 puntos",
+      color: "border-indigo-200 bg-indigo-50"
+    },
+    {
+      icon: <FiGift className="text-red-500" size={28} />,
+      title: "Visitas en Grupo",
+      description: "Trae a 3+ amigos y obtén bonificación grupal",
+      reward: "+30 puntos",
+      color: "border-red-200 bg-red-50"
+    },
+    {
+      icon: <FiStar className="text-yellow-500" size={28} />,
+      title: "Completa Desafíos Diarios",
+      description: "Pequeñas misiones que cambian cada día",
+      reward: "+10 puntos",
+      color: "border-yellow-200 bg-yellow-50"
+    }
+  ];
+
+  const chatFeatures = [
+    { icon: <FiNavigation className="text-blue-500" size={16} />, text: "Direcciones precisas a cualquier lugar de la ruta" },
+    { icon: <FiBook className="text-green-500" size={16} />, text: "Historia y curiosidades de cada ubicación" }, 
+    { icon: <FiClock className="text-purple-500" size={16} />, text: "Horarios de apertura y mejor momento para visitar" },
+    { icon: <FiCoffee className="text-amber-500" size={16} />, text: "Recomendaciones de restaurantes cercanos" },
+    { icon: <FiTruck className="text-gray-500" size={16} />, text: "Información del transporte público" },
+    { icon: <FiStar className="text-yellow-500" size={16} />, text: "Consejos para maximizar tus puntos" }
+  ];
+
+  const levelSystem = [
+    { level: "Ratoncito Novato", points: "0-29 puntos", perks: "Acceso básico a la ruta" },
+    { level: "Ayudante del Ratón", points: "30-59 puntos", perks: "Descuentos en tiendas oficiales" },
+    { level: "Guardian de Dientes", points: "60-99 puntos", perks: "Acceso a eventos especiales" },
+    { level: "Amigo de Ratoncito", points: "100-149 puntos", perks: "Tours privados gratuitos" },
+    { level: "Embajador Real", points: "150+ puntos", perks: "Acceso VIP y merchandise exclusivo" }
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-amber-100 pb-20">
-      <Header title="¿Cómo Funciona?" showBackButton />
+    <div className="min-h-screen bg-gradient-to-b from-amber-50 via-yellow-50 to-amber-50 pb-20">
+      <Header title="Guía de la App" showBackButton />
       
-      <div className="container mx-auto px-4 py-6">
-        {/* Introducción */}
-        <div className="card p-6 mb-8">
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-2xl">🐭</span>
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Hero Section con imagen del ratón */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100">
+          <div className="flex items-center space-x-6">
+            <div className="flex-shrink-0">
+              <img 
+                src={ratonSaco} 
+                alt="Ratoncito Pérez" 
+                className="w-24 h-24 object-contain"
+              />
             </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              Descubre Madrid con el Ratoncito Pérez
-            </h2>
-            <p className="text-gray-600">
-              Una experiencia única que combina historia, cultura y tecnología para explorar los rincones más emblemáticos de Madrid.
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                ¡Bienvenido a la Aventura!
+              </h2>
+              <p className="text-gray-600">
+                Descubre Madrid siguiendo los pasos del famoso Ratoncito Pérez
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Cómo Ganar Puntos */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <FiDollarSign className="mr-2 text-amber-600" />
+            Cómo Ganar Puntos
+          </h3>
+          <div className="space-y-4">
+            {guideSteps.map((step, index) => (
+              <div key={index} className="flex items-start space-x-4 p-4 bg-gray-50 rounded-xl">
+                <div className="flex-shrink-0">
+                  {step.icon}
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-800 mb-1">{step.title}</h4>
+                  <p className="text-gray-600 text-sm mb-2">{step.description}</p>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                    {step.points}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Actividades Bonus */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <FiGift className="mr-2 text-amber-600" />
+            Puntos Extra y Actividades Especiales
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {bonusActivities.map((activity, index) => (
+              <div key={index} className={`p-4 rounded-xl border-2 ${activity.color}`}>
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0">
+                    {activity.icon}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-800 mb-1">{activity.title}</h4>
+                    <p className="text-gray-600 text-sm mb-2">{activity.description}</p>
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
+                      {activity.reward}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Guía del Chat Bot */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <FiMessageCircle className="mr-2 text-amber-600" />
+            Tu Guía Turístico Virtual
+          </h3>
+          <p className="text-gray-600 mb-4">
+            El Ratoncito Pérez está aquí para ayudarte. Puedes preguntarle sobre:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {chatFeatures.map((feature, index) => (
+              <div key={index} className="flex items-center space-x-3 p-3 bg-amber-50 rounded-lg">
+                {feature.icon}
+                <span className="text-sm text-gray-700">{feature.text}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <p className="text-blue-800 text-sm flex items-center">
+              <FiHelpCircle className="mr-2 text-blue-600" size={16} />
+              <strong>Consejo:</strong> Pregunta "¿Dónde estoy?" para obtener información específica de tu ubicación actual
             </p>
           </div>
         </div>
 
-        {/* Pasos */}
-        <div className="mb-8">
-          <h3 className="text-xl font-bold text-gray-800 mb-6 text-center">
-            Cómo Funciona la Aventura
+        {/* Sistema de Niveles */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100">
+          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+            <FiAward className="mr-2 text-amber-600" />
+            Sistema de Niveles y Recompensas
           </h3>
-          <div className="space-y-6">
-            {steps.map((step, index) => (
-              <div key={index} className="card p-6">
-                <div className="flex items-start space-x-4">
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 bg-amber-600 rounded-full flex items-center justify-center text-white font-bold">
-                      {index + 1}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <div className="text-amber-600">
-                        {step.icon}
-                      </div>
-                      <h4 className="text-lg font-semibold text-gray-800">
-                        {step.title}
-                      </h4>
-                    </div>
-                    <p className="text-gray-600">
-                      {step.description}
-                    </p>
-                  </div>
+          <div className="space-y-3">
+            {levelSystem.map((level, index) => (
+              <div key={index} className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-200">
+                <div className="flex-1">
+                  <h4 className="font-semibold text-gray-800">{level.level}</h4>
+                  <p className="text-amber-600 text-sm font-medium">{level.points}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-600 text-sm">{level.perks}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Lugares Oficiales */}
-        <div className="card p-6 mb-8">
-          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-            <FiMapPin className="text-amber-600 mr-2" />
-            Lugares de la Ruta Oficial
+        {/* Consejos Finales */}
+        <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl p-6 text-white">
+          <h3 className="text-xl font-bold mb-4 flex items-center">
+            <FiTarget className="mr-2" />
+            ¡Consejos para Maximizar tu Aventura!
           </h3>
-          <p className="text-gray-600 mb-4">
-            Estos son los sitios emblemáticos que forman parte de la ruta oficial del Ratoncito Pérez. 
-            Solo visitando estos lugares ganarás puntos:
-          </p>
-          <div className="space-y-2">
-            {officialPlaces.map((place, index) => (
-              <div key={index} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-lime-200/20">
-                <div className="w-6 h-6 bg-amber-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                  {index + 1}
-                </div>
-                <span className="text-gray-700">{place}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Sistema de Puntos */}
-        <div className="card p-6 mb-8">
-          <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-            <FiStar className="text-amber-600 mr-2" />
-            Sistema de Puntos y Niveles
-          </h3>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center p-3 bg-lime-200/20 rounded-lg">
-              <span className="font-medium">Principiante</span>
-              <span className="text-amber-600 font-bold">0 - 50 puntos</span>
+          <div className="space-y-3">
+            <div className="flex items-start space-x-3">
+              <FiBattery className="text-amber-200 mt-1" size={16} />
+              <p className="text-sm">Mantén tu batería cargada para no perderte ninguna ubicación</p>
             </div>
-            <div className="flex justify-between items-center p-3 bg-lime-200/20 rounded-lg">
-              <span className="font-medium">Explorador</span>
-              <span className="text-amber-600 font-bold">51 - 150 puntos</span>
+            <div className="flex items-start space-x-3">
+              <FiSun className="text-amber-200 mt-1" size={16} />
+              <p className="text-sm">Los mejores momentos para visitar son por la mañana (menos multitudes)</p>
             </div>
-            <div className="flex justify-between items-center p-3 bg-lime-200/20 rounded-lg">
-              <span className="font-medium">Aventurero</span>
-              <span className="text-amber-600 font-bold">151 - 300 puntos</span>
+            <div className="flex items-start space-x-3">
+              <FiCamera className="text-amber-200 mt-1" size={16} />
+              <p className="text-sm">No olvides tomar fotos en cada ubicación para puntos extra</p>
             </div>
-            <div className="flex justify-between items-center p-3 bg-lime-200/20 rounded-lg">
-              <span className="font-medium">Maestro Explorador</span>
-              <span className="text-amber-600 font-bold">300+ puntos</span>
-            </div>
-          </div>
-          <p className="text-sm text-gray-600 mt-4">
-            * Cada lugar oficial visitado otorga entre 10-30 puntos dependiendo de su importancia histórica.
-          </p>
-        </div>
-
-        {/* Consejos */}
-        <div className="card p-6">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">
-            Consejos para tu Aventura
-          </h3>
-          <div className="space-y-3 text-gray-600">
-            <div className="flex items-start space-x-2">
-              <span className="text-amber-600">•</span>
-              <span>Lleva tu móvil con batería suficiente para toda la ruta</span>
-            </div>
-            <div className="flex items-start space-x-2">
-              <span className="text-amber-600">•</span>
-              <span>Usa calzado cómodo, caminarás bastante por el centro de Madrid</span>
-            </div>
-            <div className="flex items-start space-x-2">
-              <span className="text-amber-600">•</span>
-              <span>No olvides hacer preguntas al Ratoncito sobre lo que vas viendo</span>
-            </div>
-            <div className="flex items-start space-x-2">
-              <span className="text-amber-600">•</span>
-              <span>Puedes pausar la ruta en cualquier momento y continuarla después</span>
+            <div className="flex items-start space-x-3">
+              <FiUsers className="text-amber-200 mt-1" size={16} />
+              <p className="text-sm">Invita amigos para obtener bonificaciones grupales</p>
             </div>
           </div>
         </div>
       </div>
+
+      <Navigation />
     </div>
   );
 };
