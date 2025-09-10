@@ -4,9 +4,17 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 import uvicorn
+import os
 
-from Server.api.endpoints import chat, routes, family
-from core.models.database import Database
+# Load .env if available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+from Server.api.endpoints import chat, routes, family, debug
+from Server.core.models.database import Database
 from Server.core.agents.raton_perez import raton_perez, RatonPerez
 
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +31,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Database connection failed")
 
     logger.info("✅ Base de datos conectada correctamente")
-    app.state.db = db  # 🔑 Guardar en app.state para que las dependencias puedan usarla
+    app.state.db = db
 
     # Inicializar agente
     global raton_perez
@@ -58,6 +66,7 @@ async def lifespan(app: FastAPI):
     if db:
         db.close()
 
+# Crear aplicación principal
 app = FastAPI(
     title="Ratoncito Pérez Digital API",
     description="API para el agente turístico virtual Ratoncito Pérez",
@@ -65,6 +74,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -73,10 +83,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Incluir routers con prefijos consistentes
 app.include_router(chat.router, prefix="/api")
 app.include_router(family.router, prefix="/api")
 app.include_router(routes.router, prefix="/api")
+app.include_router(debug.router)  # Debug sin prefijo para compatibilidad
 
+# Endpoints principales
 @app.get("/")
 async def root():
     return {
@@ -88,21 +101,73 @@ async def root():
             "chat": "/api/chat",
             "families": "/api/families",
             "routes": "/api/routes",
+            "debug": "/debug",
             "docs": "/docs"
         }
     }
 
 @app.get("/health")
 async def health_check(request: Request):
+    """Health check principal con formato estándar"""
     db = getattr(request.app.state, "db", None)
     status = {
         "status": "healthy",
-        "database": "connected" if db and db.health_check() else "disconnected"
+        "database": "connected" if db and db.health_check() else "disconnected",
+        "timestamp": int(__import__('time').time())
     }
     if status["database"] == "disconnected":
         status["status"] = "unhealthy"
     return status
 
+@app.get("/healthz")
+def healthz():
+    """Health check adicional con información de servicios"""
+    status = {"status": "ok"}
+    
+    # Pinecone health
+    try:
+        from Server.core.services.pinecone_service import pinecone_service
+        if pinecone_service is not None:
+            status["pinecone"] = pinecone_service.get_status()
+        else:
+            status["pinecone"] = {"available": False, "reason": "service not imported"}
+    except Exception as e:
+        status["pinecone"] = {"available": False, "error": str(e)}
+
+    # Redis health
+    try:
+        import redis
+        redis_url = os.getenv("REDIS_URL")
+        if redis_url:
+            client = redis.StrictRedis.from_url(redis_url, socket_connect_timeout=0.25, socket_timeout=0.25)
+            ok = bool(client.ping())
+            status["redis"] = {"available": ok, "url": redis_url}
+        else:
+            status["redis"] = {"available": False, "reason": "REDIS_URL not set"}
+    except Exception as e:
+        status["redis"] = {"available": False, "error": str(e)}
+    
+    return status
+
+@app.get("/_routes")
+def list_routes():
+    """Endpoint de descubrimiento para debugging"""
+    routes = []
+    for route in app.router.routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", None)
+        name = getattr(route, "name", None)
+        include = getattr(route, "include_in_schema", True)
+        if path:
+            routes.append({
+                "path": path,
+                "name": name,
+                "methods": sorted(list(methods)) if methods else [],
+                "include_in_schema": include,
+            })
+    return {"count": len(routes), "routes": routes}
+
+# Exception handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
     return JSONResponse(
@@ -110,7 +175,11 @@ async def not_found_handler(request, exc):
         content={
             "error": "Endpoint no encontrado",
             "message": "El Ratoncito Pérez no puede encontrar lo que buscas 🐭",
-            "suggestion": "Visita /docs para ver todos los endpoints disponibles"
+            "suggestion": "Visita /docs para ver todos los endpoints disponibles",
+            "available_endpoints": [
+                "/health", "/api/chat/message", "/api/families/", 
+                "/api/routes/overview", "/debug/ping"
+            ]
         },
     )
 
@@ -128,95 +197,3 @@ async def internal_error_handler(request, exc):
 
 if __name__ == "__main__":
     uvicorn.run("Server.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import os
-
-# Load .env if available (optional)
-try:  # pragma: no cover
-    from dotenv import load_dotenv  # type: ignore
-
-    load_dotenv()
-except Exception:
-    pass
-
-# Import health status from pinecone service
-try:
-    from Server.core.services.pinecone_service import pinecone_service
-except Exception:
-    pinecone_service = None
-
-app = FastAPI(title="ratoncito API", version=os.getenv("APP_VERSION", "0.1.0"))
-
-# Basic CORS for dev
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include API routers
-try:
-    from Server.api.endpoints.chat import router as chat_router
-    from Server.api.endpoints.family import router as family_router
-    from Server.api.endpoints.routes import router as routes_router
-    from Server.api.endpoints.debug import router as debug_router
-
-    app.include_router(chat_router)
-    app.include_router(family_router)
-    app.include_router(routes_router)
-    app.include_router(debug_router)
-except Exception:
-    # Routers are optional during bootstrap; keep app running even if not available
-    pass
-
-@app.get("/")
-def read_root():
-    return {"message": "ratoncito API up"}
-
-@app.get("/healthz")
-def healthz():
-    status = {"pinecone": None, "redis": None}
-    if pinecone_service is not None:
-        try:
-            status["pinecone"] = pinecone_service.get_status()
-        except Exception as e:
-            status["pinecone"] = {"error": str(e)}
-    else:
-        status["pinecone"] = {"available": False, "reason": "service not imported"}
-
-    # Redis health (optional)
-    try:
-        import redis  # type: ignore
-
-        redis_url = os.getenv("REDIS_URL")
-        if redis_url:
-            client = redis.StrictRedis.from_url(redis_url, socket_connect_timeout=0.25, socket_timeout=0.25)
-            ok = bool(client.ping())
-            status["redis"] = {"available": ok, "url": redis_url}
-        else:
-            status["redis"] = {"available": False, "reason": "REDIS_URL not set"}
-    except Exception as e:  # pragma: no cover - best effort
-        status["redis"] = {"available": False, "error": str(e)}
-    return {"status": "ok", **status}
-
-
-@app.get("/_routes")
-def list_routes():
-    # Handy discovery endpoint for local testing
-    routes = []
-    for r in app.router.routes:
-        methods = getattr(r, "methods", None)
-        path = getattr(r, "path", None)
-        name = getattr(r, "name", None)
-        include = getattr(r, "include_in_schema", True)
-        if path:
-            routes.append({
-                "path": path,
-                "name": name,
-                "methods": sorted(list(methods)) if methods else [],
-                "include_in_schema": include,
-            })
-    return {"count": len(routes), "routes": routes}

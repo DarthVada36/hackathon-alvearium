@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 import logging
 
-from core.models.database import Database, get_db
-from core.models.schemas import FamilyCreate, FamilyResponse
+from Server.core.models.database import Database
+from Server.api.dependencies import get_db
+from Server.core.models.schemas import FamilyCreate, FamilyResponse
 
 router = APIRouter(prefix="/families", tags=["families"])
 logger = logging.getLogger(__name__)

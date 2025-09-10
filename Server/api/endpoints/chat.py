@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 @router.post("/message", response_model=ChatResponse)
 async def chat_endpoint(chat_data: ChatMessage, db: Database = Depends(get_db)):
     """
-    Endpoint para enviar mensajes al Ratoncito Pérez
+    Endpoint principal para enviar mensajes al Ratoncito Pérez
     """
     try:
         result = await process_chat_message(
@@ -39,11 +39,10 @@ async def get_family_status(family_id: int, db: Database = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error obteniendo estado de familia {family_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-from fastapi import APIRouter
-
-router = APIRouter(prefix="/chat", tags=["chat"])
-
 
 @router.get("/ping")
 def ping():
-	return {"service": "chat", "ok": True}
+    """
+    Health check del servicio de chat
+    """
+    return {"service": "chat", "ok": True}
