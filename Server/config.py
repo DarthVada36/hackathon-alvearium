@@ -33,7 +33,8 @@ class LangChainSettings(BaseSettings):
     openai_api_key: Optional[str] = None
 
     # === Configuración del agente ===
-    agent_model: str = "gemma2-9b-it"  # Modelo por defecto
+    # ✅ Usamos un modelo Groq más potente que geemma (por ejemplo LLaMA 3 de 70B)
+    agent_model: str = "gemma2-9b-it"  
     temperature: float = 0.7
     max_tokens: int = 1500
 

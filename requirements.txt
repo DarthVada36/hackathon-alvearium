@@ -2,21 +2,19 @@
 fastapi
 uvicorn[standard]
 
-## HTTP and utilities
-requests
-loguru==0.7.3
-
 ## Env & settings
 python-dotenv==1.0.1
-pydantic-settings==2.8.1
 
-## Database
-psycopg2-binary==2.9.5
+## HTTP and utilities
+requests
 
 ## Caching
 redis
 
-## Vector DB & Embeddings
+## Database
+psycopg2-binary==2.9.5
+
+## Vector DB & Embeddings (serverless v3)
 pinecone==4.1.0
 sentence-transformers==2.2.2
 faiss-cpu==1.8.0.post1
@@ -24,14 +22,5 @@ faiss-cpu==1.8.0.post1
 ## Optional providers/APIs
 googlemaps
 langchain-openai
-langchain==0.3.14
-langchain-community==0.3.12
-langchain-core==0.3.28
-langchain-groq==0.2.7
-groq==0.14.0
+python-dotenv==1.0.1
 
-## Networking / DNS
-dnspython==2.7.0
-
-## Testing
-pytest==8.3.4

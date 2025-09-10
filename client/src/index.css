@@ -1,68 +1,122 @@
-:root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
+    min-height: 100vh;
   }
-  a:hover {
-    color: #747bff;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-golden-amber text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl hover:bg-opacity-90 transition-all duration-300 transform hover:-translate-y-1;
   }
-  button {
-    background-color: #f9f9f9;
+  
+  .btn-secondary {
+    @apply bg-golden-medium text-gray-700 font-semibold py-3 px-6 rounded-xl border-2 border-golden-light hover:bg-golden-light transition-all duration-300;
+  }
+  
+  .card {
+    @apply bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-golden-light/50;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border-2 border-golden-light focus:border-golden-amber focus:outline-none transition-colors bg-white/70;
+  }
+}
+
+/* Leaflet Map Styles */
+@layer utilities {
+  /* Import Leaflet CSS */
+  @import 'leaflet/dist/leaflet.css';
+  @import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
+  
+  /* Custom Leaflet Overrides */
+  .leaflet-container {
+    font-family: 'Inter', sans-serif !important;
+    border-radius: 1rem;
+  }
+
+  /* Custom marker styles */
+  .custom-marker {
+    background: transparent !important;
+    border: none !important;
+  }
+
+  /* Hide default routing instructions panel */
+  .leaflet-routing-container {
+    display: none !important;
+  }
+
+  /* Custom popup styles */
+  .leaflet-popup-content-wrapper {
+    border-radius: 12px !important;
+    border: 2px solid #f59e0b !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .leaflet-popup-tip {
+    background: #f59e0b !important;
+  }
+
+  .leaflet-popup-content {
+    margin: 8px 12px !important;
+    font-family: 'Inter', sans-serif !important;
+  }
+
+  /* Custom control styles */
+  .leaflet-control-zoom {
+    border: none !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .leaflet-control-zoom a {
+    background-color: white !important;
+    border: none !important;
+    color: #374151 !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .leaflet-control-zoom a:hover {
+    background-color: #f59e0b !important;
+    color: white !important;
+  }
+
+  /* Route line customization */
+  .leaflet-routing-alt {
+    background: white !important;
+    border-radius: 8px !important;
+    border: 2px solid #f59e0b !important;
+    padding: 8px !important;
+    margin: 4px !important;
+  }
+
+  /* Attribution styles */
+  .leaflet-control-attribution {
+    background: rgba(255, 255, 255, 0.8) !important;
+    border-radius: 4px !important;
+    font-size: 10px !important;
+    padding: 2px 4px !important;
+  }
+
+  /* Fix for marker icons */
+  .leaflet-marker-icon {
+    margin-left: -12px !important;
+    margin-top: -41px !important;
+  }
+
+  /* Custom route highlighting */
+  .route-active {
+    stroke: #f59e0b !important;
+    stroke-width: 4 !important;
+    stroke-opacity: 0.8 !important;
   }
 }

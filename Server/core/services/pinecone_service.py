@@ -2,20 +2,21 @@
 Pinecone service (v3 SDK) with simple CRUD and health reporting.
 
 Configuration via environment variables:
-  - PINECONE_API_KEY  (required)
-  - PINECONE_INDEX    (default: "perez")
-	- PINECONE_DIM      (default: 1024)
-  - PINECONE_METRIC   (default: "cosine")
-  - PINECONE_CLOUD    (default: "aws")
-  - PINECONE_REGION   (default: "us-east-1")
+- PINECONE_API_KEY      (required for remote)
+- PINECONE_INDEX_NAME   (default: "perez")
+- PINECONE_DIMENSION    (default: 1024)
+- PINECONE_METRIC       (default: "cosine")
+- PINECONE_CLOUD        (default: "aws")
+- PINECONE_REGION       (default: "us-east-1")
 """
 from __future__ import annotations
 
+import hashlib
+import math
 import os
 import time
-import math
-import hashlib
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
 
 # Lazy import cache for embeddings
 _EMBED_MODEL = None
@@ -24,8 +25,8 @@ _EMBED_MODEL = None
 class PineconeService:
 	def __init__(self) -> None:
 		self.api_key = os.getenv("PINECONE_API_KEY")
-		self.index_name = os.getenv("PINECONE_INDEX", "perez")
-		self.dimension = int(os.getenv("PINECONE_DIM", "1024"))
+		self.index_name = os.getenv("PINECONE_INDEX_NAME", "perez")
+		self.dimension = int(os.getenv("PINECONE_DIMENSION", "1024"))
 		self.metric = os.getenv("PINECONE_METRIC", "cosine")
 		self.cloud = os.getenv("PINECONE_CLOUD", "aws")
 		self.region = os.getenv("PINECONE_REGION", "us-east-1")
@@ -38,38 +39,39 @@ class PineconeService:
 		# In-memory fallback vector store: {namespace: {id: (values, metadata)}}
 		self._mem_store: Dict[str, Dict[str, Tuple[List[float], Optional[Dict[str, Any]]]]] = {}
 
+		# Try to initialize remote Pinecone if API key is present
 		if not self.api_key:
 			self._last_error = "PINECONE_API_KEY not set"
-			return
+		else:
+			try:
+				from pinecone import Pinecone, ServerlessSpec  # type: ignore
 
-		try:
-			from pinecone import Pinecone, ServerlessSpec  # type: ignore
+				self._pc = Pinecone(api_key=self.api_key)
+				# Create index if missing
+				names = [i["name"] for i in self._pc.list_indexes()] if hasattr(self._pc, "list_indexes") else []
+				if self.index_name not in names:
+					self._pc.create_index(
+						name=self.index_name,
+						dimension=self.dimension,
+						metric=self.metric,
+						spec=ServerlessSpec(cloud=self.cloud, region=self.region),
+					)
+					# Brief wait until index is ready
+					_t0 = time.time()
+					while True:
+						meta = next((i for i in self._pc.list_indexes() if i.get("name") == self.index_name), None)
+						if meta and meta.get("status", {}).get("ready") is True:
+							break
+						if time.time() - _t0 > 30:
+							break
+						time.sleep(1)
+				self._index = self._pc.Index(self.index_name)
+			except Exception as e:  # pragma: no cover - environment-specific
+				self._last_error = str(e)
+				self._pc = None
+				self._index = None
 
-			self._pc = Pinecone(api_key=self.api_key)
-			# Create index if missing
-			names = [i["name"] for i in self._pc.list_indexes()] if hasattr(self._pc, "list_indexes") else []
-			if self.index_name not in names:
-				self._pc.create_index(
-					name=self.index_name,
-					dimension=self.dimension,
-					metric=self.metric,
-					spec=ServerlessSpec(cloud=self.cloud, region=self.region),
-				)
-				# Brief wait until index is ready
-				_t0 = time.time()
-				while True:
-					meta = next((i for i in self._pc.list_indexes() if i.get("name") == self.index_name), None)
-					if meta and meta.get("status", {}).get("ready") is True:
-						break
-					if time.time() - _t0 > 30:
-						break
-					time.sleep(1)
-			self._index = self._pc.Index(self.index_name)
-		except Exception as e:  # pragma: no cover - environment-specific
-			self._last_error = str(e)
-			self._pc = None
-			self._index = None
-
+	# ---------- Embeddings ----------
 	def _get_embed_model(self):
 		"""Lazily load the sentence-transformers model."""
 		global _EMBED_MODEL
@@ -86,47 +88,50 @@ class PineconeService:
 			return None
 
 	def _hash_embed(self, text: str) -> List[float]:
-		"""Deterministic hash-based embedding fallback with normalization."""
-		# Extend digest to required length
+		"""Deterministic hash-based embedding fallback with L2 normalization."""
 		dim = self.dimension
 		buf = bytearray()
 		seed = text.encode("utf-8")
 		while len(buf) < dim * 4:
 			seed = hashlib.sha256(seed).digest()
 			buf.extend(seed)
-		# Map bytes to floats in [-1, 1]
 		vals: List[float] = []
 		for i in range(dim):
-			# take 4 bytes, convert to int, scale
-			chunk = int.from_bytes(buf[i*4:(i+1)*4], byteorder="little", signed=False)
-			x = (chunk / 0xFFFFFFFF) * 2.0 - 1.0
+			chunk = bytes(buf[i * 4 : (i + 1) * 4])
+			v = int.from_bytes(chunk, "little", signed=False)
+			# Map to [0,1], then to [-1,1]
+			x = (v / 4294967295.0) * 2.0 - 1.0
 			vals.append(x)
 		# Normalize
-		norm = math.sqrt(sum(v*v for v in vals)) or 1.0
-		return [v / norm for v in vals]
+		norm = math.sqrt(sum(x * x for x in vals)) or 1.0
+		return [x / norm for x in vals]
+
+	def embed_text(self, text: str) -> List[float]:
+		model = self._get_embed_model()
+		if model is None:
+			return self._hash_embed(f"passage: {text}")
+		try:
+			vec = model.encode([f"passage: {text}"], normalize_embeddings=True)[0]
+			return vec.tolist() if hasattr(vec, "tolist") else list(vec)
+		except Exception:
+			return self._hash_embed(f"passage: {text}")
+
+	def embed_texts(self, texts: List[str]) -> List[List[float]]:
+		model = self._get_embed_model()
+		if model is None:
+			return [self._hash_embed(f"passage: {t}") for t in texts]
+		try:
+			vecs = model.encode([f"passage: {t}" for t in texts], normalize_embeddings=True)
+			out: List[List[float]] = []
+			for v in vecs:
+				out.append(v.tolist() if hasattr(v, "tolist") else list(v))
+			return out
+		except Exception:
+			return [self._hash_embed(f"passage: {t}") for t in texts]
 
 	# ---------- Basic ops ----------
 	def is_available(self) -> bool:
 		return self._index is not None
-
-	# ---------- Embeddings helpers ----------
-	def embed_text(self, text: str, is_query: bool = False) -> List[float]:
-		model = self._get_embed_model()
-		prefix = "query: " if is_query else "passage: "
-		if not model:
-			# Fallback
-			return self._hash_embed(prefix + text)
-		vec = model.encode(prefix + text, normalize_embeddings=True)
-		return vec.tolist()
-
-	def embed_texts(self, texts: List[str], is_query: bool = False) -> List[List[float]]:
-		model = self._get_embed_model()
-		prefix = "query: " if is_query else "passage: "
-		if not model:
-			# Fallback
-			return [self._hash_embed(prefix + t) for t in texts]
-		vecs = model.encode([prefix + t for t in texts], normalize_embeddings=True)
-		return [v.tolist() for v in vecs]
 
 	def upsert_vectors(
 		self,
@@ -134,19 +139,21 @@ class PineconeService:
 		namespace: Optional[str] = None,
 	) -> Any:
 		"""vectors: [{id, values, metadata?}]"""
-		if not self._index:
-			# In-memory upsert
-			ns = namespace or "default"
-			store = self._mem_store.setdefault(ns, {})
-			count = 0
-			for v in vectors:
-				vid = v["id"]
-				vals = v["values"]
-				meta = v.get("metadata")
-				store[vid] = (list(vals), meta)
-				count += 1
-			return {"upserted_count": count}
-		return self._index.upsert(vectors=list(vectors), namespace=namespace)
+		ns = namespace or ""
+		if self._index:
+			return self._index.upsert(vectors=list(vectors), namespace=namespace)
+		# In-memory fallback
+		store = self._mem_store.setdefault(ns, {})
+		count = 0
+		for item in vectors:
+			vid = item.get("id")
+			values = item.get("values")
+			metadata = item.get("metadata")
+			if vid is None or values is None:
+				continue
+			store[str(vid)] = (list(values), metadata)
+			count += 1
+		return {"upserted_count": count}
 
 	def query(
 		self,
@@ -156,26 +163,39 @@ class PineconeService:
 		include_metadata: bool = True,
 		namespace: Optional[str] = None,
 	) -> Any:
-		if not self._index:
-			# In-memory query: cosine similarity (vectors normalized already)
-			ns = namespace or "default"
-			store = self._mem_store.get(ns, {})
-			# compute dot product as cosine since vectors normalized
-			def dot(a: List[float], b: List[float]) -> float:
-				return sum(x*y for x, y in zip(a, b))
-			results = []
-			for vid, (vals, meta) in store.items():
-				score = dot(vector, vals)
-				results.append({"id": vid, "score": score, "metadata": meta if include_metadata else None})
-			results.sort(key=lambda r: r["score"], reverse=True)
-			return results[:top_k]
-		return self._index.query(
-			vector=vector,
-			top_k=top_k,
-			filter=filter,
-			include_metadata=include_metadata,
-			namespace=namespace,
-		)
+		ns = namespace or ""
+		if self._index:
+			res = self._index.query(
+				vector=vector,
+				top_k=top_k,
+				filter=filter,
+				include_metadata=include_metadata,
+				namespace=namespace,
+			)
+			# Normalize result to list of dicts
+			matches: List[Dict[str, Any]] = []
+			if hasattr(res, "matches") and res.matches is not None:
+				for m in res.matches:
+					matches.append({"id": getattr(m, "id", None), "score": getattr(m, "score", None), "metadata": getattr(m, "metadata", None)})
+			elif isinstance(res, dict):
+				for m in res.get("matches", []) or []:
+					if isinstance(m, dict):
+						matches.append({"id": m.get("id"), "score": m.get("score"), "metadata": m.get("metadata")})
+			return matches
+		# In-memory fallback
+		store = self._mem_store.get(ns, {})
+		scored: List[Tuple[str, float, Optional[Dict[str, Any]]]] = []
+		for vid, (vals, meta) in store.items():
+			if filter and meta:
+				ok = all(meta.get(k) == v for k, v in filter.items())
+				if not ok:
+					continue
+			# Cosine similarity assuming normalized inputs
+			score = sum(a * b for a, b in zip(vals, vector))
+			scored.append((vid, score, meta))
+		scored.sort(key=lambda x: x[1], reverse=True)
+		out = [{"id": vid, "score": score, "metadata": meta} for vid, score, meta in scored[: top_k or 5]]
+		return out
 
 	def delete(
 		self,
@@ -183,23 +203,26 @@ class PineconeService:
 		filter: Optional[Dict[str, Any]] = None,
 		namespace: Optional[str] = None,
 	) -> Any:
-		if not self._index:
-			ns = namespace or "default"
-			store = self._mem_store.setdefault(ns, {})
-			deleted = 0
-			if ids:
-				for vid in ids:
-					if vid in store:
-						store.pop(vid, None)
-						deleted += 1
-			elif filter:
-				# basic filter on metadata equality
-				to_del = [vid for vid, (_, meta) in store.items() if meta and all(meta.get(k) == v for k, v in filter.items())]
-				for vid in to_del:
+		ns = namespace or ""
+		if self._index:
+			return self._index.delete(ids=ids, filter=filter, namespace=namespace)
+		# In-memory fallback
+		store = self._mem_store.setdefault(ns, {})
+		deleted = 0
+		if ids:
+			for vid in ids:
+				if vid in store:
 					store.pop(vid, None)
-				deleted += len(to_del)
-			return {"deleted_count": deleted}
-		return self._index.delete(ids=ids, filter=filter, namespace=namespace)
+					deleted += 1
+		elif filter:
+			to_del = [vid for vid, (_, meta) in store.items() if meta and all(meta.get(k) == v for k, v in filter.items())]
+			for vid in to_del:
+				store.pop(vid, None)
+			deleted += len(to_del)
+		else:
+			deleted = len(store)
+			store.clear()
+		return {"deleted_count": deleted}
 
 	def get_index_stats(self) -> Dict[str, Any]:
 		if not self._index:
@@ -221,7 +244,7 @@ class PineconeService:
 		embed_model_loaded = self._get_embed_model() is not None
 		status: Dict[str, Any] = {
 			"pinecone_available": ok,
-			"faiss_available": False,  # no FAISS fallback in this build
+			"faiss_available": False,
 			"embedding_model_loaded": embed_model_loaded,
 			"index": self.index_name,
 			"dimension": self.dimension,
@@ -238,6 +261,53 @@ class PineconeService:
 		except Exception as e:
 			status["stats_error"] = str(e)
 		return status
+
+	# ---------- Helper methods for Madrid knowledge ----------
+	def upsert_madrid_content(self, poi_id: str, content_type: str, text: str, embedding: List[float]) -> bool:
+		"""Helper específico para subir contenido de Madrid"""
+		try:
+			vector_id = f"{poi_id}_{content_type}"
+			metadata = {
+				"poi_id": poi_id,
+				"content_type": content_type,
+				"text": text[:1000],
+				"source": "wikipedia",
+			}
+			self.upsert_vectors(
+				[
+					{
+						"id": vector_id,
+						"values": embedding,
+						"metadata": metadata,
+					}
+				]
+			)
+			return True
+		except Exception:
+			return False
+
+	def search_madrid_content(
+		self, query_embedding: List[float], poi_id: str | None = None, content_type: str | None = None, top_k: int = 3
+	) -> List[Dict]:
+		"""Buscar contenido de Madrid con filtros opcionales"""
+		try:
+			filter_dict: Dict[str, Any] = {}
+			if poi_id:
+				filter_dict["poi_id"] = poi_id
+			if content_type:
+				filter_dict["content_type"] = content_type
+
+			results = self.query(
+				vector=query_embedding,
+				top_k=top_k,
+				filter=filter_dict if filter_dict else None,
+				include_metadata=True,
+			)
+
+			# Result already normalized to list[dict]
+			return results if isinstance(results, list) else []
+		except Exception:
+			return []
 
 
 # Exported instance used by the app
