@@ -158,10 +158,25 @@ class PineconeService:
             logging.error(f"Error getting index stats: {e}")
             return None
 
-# Global instance
+    def get_status(self) -> dict:
+        """Returns health/status info for Pinecone, FAISS, and embedding model"""
+        status = {
+            "pinecone_available": self._initialized and self.index is not None,
+            "faiss_available": self._use_faiss and self._faiss_index is not None,
+            "embedding_model_loaded": self.embedding_model is not None,
+        }
+        if status["pinecone_available"]:
+            try:
+                stats = self.get_index_stats()
+                status["pinecone_index_stats"] = stats
+            except Exception:
+                status["pinecone_index_stats"] = None
+        if status["faiss_available"]:
+            status["faiss_vectors_stored"] = self._faiss_index.ntotal if self._faiss_index else None
+        return status
+
 pinecone_service = PineconeService()
 
-# Helper functions
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
     """Generates embeddings for a list of texts"""
