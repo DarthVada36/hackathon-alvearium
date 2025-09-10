@@ -1,12 +1,12 @@
 """
 Family Context - Gestión simple del contexto familiar
-ACTUALIZADO para usar base de datos real
 """
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 from dataclasses import dataclass
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +299,7 @@ async def save_family_context(context: FamilyContext, db):
 
 async def _load_from_database(family_id: int, db) -> Optional[Dict[str, Any]]:
     """
-    Carga datos desde BD real
+    Carga datos desde BD real - CORREGIDO para manejar tipos JSON
     """
     try:
         # Cargar datos de la familia
@@ -345,10 +345,20 @@ async def _load_from_database(family_id: int, db) -> Optional[Dict[str, Any]]:
         progress_result = db.execute_query(progress_query, (family_id,))
         
         if progress_result:
+            # Parsear current_location si es un string JSON
+            current_location = progress_result[0]['current_location']
+            if isinstance(current_location, str):
+                try:
+                    current_location = json.loads(current_location)
+                except (json.JSONDecodeError, TypeError):
+                    current_location = {}
+            elif current_location is None:
+                current_location = {}
+                
             family_data["route_progress"] = {
                 "current_poi_index": progress_result[0]['current_poi_index'],
                 "points_earned": progress_result[0]['points_earned'],
-                "current_location": progress_result[0]['current_location'] or {}
+                "current_location": current_location
             }
         else:
             family_data["route_progress"] = {
@@ -366,7 +376,14 @@ async def _load_from_database(family_id: int, db) -> Optional[Dict[str, Any]]:
         conv_result = db.execute_query(conv_query, (family_id,))
         
         if conv_result and conv_result[0]['conversation_context']:
-            family_data["conversation_context"] = conv_result[0]['conversation_context']
+            conversation_context = conv_result[0]['conversation_context']
+            # Parsear si es un string JSON
+            if isinstance(conversation_context, str):
+                try:
+                    conversation_context = json.loads(conversation_context)
+                except (json.JSONDecodeError, TypeError):
+                    conversation_context = {"memory": [], "current_speaker": None}
+            family_data["conversation_context"] = conversation_context
         else:
             family_data["conversation_context"] = {
                 "memory": [],
@@ -386,7 +403,7 @@ async def _load_from_database(family_id: int, db) -> Optional[Dict[str, Any]]:
 
 async def _save_to_database(family_id: int, context_data: Dict[str, Any], db):
     """
-    Guarda en BD real
+    Guarda en BD real - CORREGIDO para manejar tipos JSON
     """
     try:
         # Actualizar progreso de ruta
@@ -395,6 +412,13 @@ async def _save_to_database(family_id: int, context_data: Dict[str, Any], db):
         # Verificar si existe registro de progreso
         check_query = "SELECT id FROM family_route_progress WHERE family_id = %s"
         exists = db.execute_query(check_query, (family_id,))
+        
+        # Convertir current_location a JSON string si es un dict
+        current_location = progress_data["current_location"]
+        if isinstance(current_location, dict):
+            current_location_json = json.dumps(current_location)
+        else:
+            current_location_json = current_location
         
         if exists:
             # Actualizar
@@ -406,7 +430,7 @@ async def _save_to_database(family_id: int, context_data: Dict[str, Any], db):
             db.execute_query(update_query, (
                 progress_data["current_poi_index"],
                 progress_data["points_earned"],
-                progress_data["current_location"],
+                current_location_json,  # Usar la versión JSON
                 family_id
             ))
         else:
@@ -420,16 +444,22 @@ async def _save_to_database(family_id: int, context_data: Dict[str, Any], db):
                 family_id,
                 progress_data["current_poi_index"],
                 progress_data["points_earned"],
-                progress_data["current_location"]
+                current_location_json  # Usar la versión JSON
             ))
         
-        # Actualizar contexto de conversación
+        # Actualizar contexto de conversación - CONVERTIR A JSON STRING
+        conversation_context = context_data["conversation_context"]
+        if isinstance(conversation_context, dict):
+            conversation_context_json = json.dumps(conversation_context)
+        else:
+            conversation_context_json = conversation_context
+            
         conv_query = """
             UPDATE families 
             SET conversation_context = %s
             WHERE id = %s
         """
-        db.execute_query(conv_query, (context_data["conversation_context"], family_id))
+        db.execute_query(conv_query, (conversation_context_json, family_id))
         
         logger.info(f"💾 Contexto de familia {family_id} guardado correctamente")
         
