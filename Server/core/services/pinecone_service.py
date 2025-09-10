@@ -1,4 +1,20 @@
 try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    SentenceTransformer = None
+    def _init_embedding_model(self):
+        """Initializes the sentence-transformers embedding model"""
+        if SentenceTransformer is None:
+            logging.error("sentence-transformers not installed. Embedding unavailable.")
+            self.embedding_model = None
+            return
+        try:
+            self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            logging.info("✅ Embedding model loaded: all-MiniLM-L6-v2")
+        except Exception as e:
+            logging.error(f"Error loading embedding model: {e}")
+            self.embedding_model = None
+try:
     import faiss
 except ImportError:
     faiss = None
@@ -37,7 +53,21 @@ class PineconeService:
         self._use_faiss = False
         self._faiss_index = None
         self._faiss_metadata = {}
+        self.embedding_model = None
         self._init_pinecone()
+        self._init_embedding_model()
+    def embed_text(self, text: str) -> Optional[list]:
+        """Returns embedding vector for input text using the loaded model"""
+        if self.embedding_model is None:
+            logging.warning("Embedding model not available.")
+            return None
+        return self.embedding_model.encode(text).tolist()
+# Example usage:
+# pinecone_service = PineconeService()
+# vector = pinecone_service.embed_text("Madrid is the capital of Spain.")
+# pinecone_service.upsert_vectors([
+#     {"id": "doc1", "values": vector, "metadata": {"text": "Madrid is the capital of Spain."}}
+# ])
 
     def _init_pinecone(self):
         """Initializes Pinecone client and index or fallback to FAISS"""
