@@ -1,27 +1,52 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-requests
-redis
-pinecone
-sentence-transformers
-googlemaps
-langchain-openai
-# LangChain Ecosystem 
-langchain==0.3.14
-langchain-community==0.3.12
-langchain-core==0.3.28
-langchain-groq==0.2.7
+# === Core FastAPI y Server ===
+fastapi==0.115.12
+uvicorn==0.34.3
+pydantic==2.11.5
+pydantic-settings==2.9.1
+starlette==0.46.2
 
-# LLM Provider
-groq==0.14.0
+# === Base de datos ===
+psycopg2-binary==2.9.10
+supabase==2.16.0
+postgrest==1.1.1
+gotrue==2.12.3
+storage3==0.11.3
+supafunc==0.9.4
+realtime==2.4.3
 
-# Configuration & Environment
-python-dotenv==1.0.1
-pydantic-settings==2.8.1
+# === LangChain y LLM ===
+langchain-core==0.3.74
+langsmith==0.4.16
 
-# Development & Testing 
-pytest==8.3.4
+# === HTTP Requests ===
+httpx==0.28.1
+requests==2.32.3
+anyio==4.9.0
 
-# Optional: Logging
-loguru==0.7.3
+# === NumPy (versión fija < 2.0 por compatibilidad) ===
+numpy<2.0,>=1.26.4
+
+# === Utilities ===
+python-dotenv==1.1.0
+python-multipart==0.0.20
+
+# === Testing ===
+pytest==8.4.0
+
+# === Embeddings (si se reactiva Pinecone) ===
+torch==2.2.2
+transformers==4.53.0
+tokenizers==0.21.2
+sentence-transformers 
+
+# === Pinecone (si se reactiva) ===
+pinecone-client==3.0.0 
+
+# === Dependencias básicas de Python ===
+typing_extensions==4.14.1
+certifi==2025.4.26
+urllib3==2.4.0
+idna==3.10
+charset-normalizer==3.4.2
+annotated-types==0.7.0
+pydantic_core==2.33.2
