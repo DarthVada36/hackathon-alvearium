@@ -11,6 +11,7 @@ const Login = () => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -20,28 +21,28 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value
     });
+    // Limpiar error cuando el usuario empiece a escribir
+    if (error) setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
     
-    // Simulación de login (en producción conectar con backend)
-    setTimeout(() => {
-      const userData = {
-        id: 1,
-        name: 'Usuario Demo',
-        email: formData.email,
-        points: 150,
-        level: 'Explorador',
-        visitedPlaces: ['Puerta del Sol', 'Plaza Mayor'],
-        badges: ['Primera Visita', 'Explorador']
-      };
+    try {
+      const result = await login(formData.email, formData.password);
       
-      login(userData);
+      if (result.success) {
+        navigate('/dashboard');
+      } else {
+        setError(result.error || 'Error al iniciar sesión');
+      }
+    } catch (error) {
+      setError('Error de conexión. Intenta de nuevo.');
+    } finally {
       setIsLoading(false);
-      navigate('/dashboard');
-    }, 1000);
+    }
   };
 
   return (
@@ -101,6 +102,20 @@ const Login = () => {
                     {showPassword ? <FiEyeOff /> : <FiEye />}
                   </button>
                 </div>
+              </div>
+
+              {/* Mensaje de error */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              {/* Credenciales de prueba */}
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                <p className="font-medium mb-1">Credenciales de prueba:</p>
+                <p>Email: test@test.com</p>
+                <p>Contraseña: password</p>
               </div>
 
               <button

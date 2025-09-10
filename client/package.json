@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
+    "dev:backend": "echo 'Para usar con backend: cd ../server && python -m uvicorn main:app --reload --port 8000'",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

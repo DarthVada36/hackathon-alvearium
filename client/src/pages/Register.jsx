@@ -89,22 +89,24 @@ const Register = () => {
     
     setIsLoading(true);
     
-    // Simulación de registro (en producción conectar con backend)
-    setTimeout(() => {
-      const userData = {
+    try {
+      const result = await register({
         name: formData.name,
         email: formData.email,
-        avatar: formData.avatar,
-        points: 0,
-        level: 'Principiante',
-        visitedPlaces: [],
-        badges: []
-      };
+        password: formData.password,
+        avatar: formData.avatar
+      });
       
-      register(userData);
+      if (result.success) {
+        navigate('/dashboard');
+      } else {
+        setErrors({ submit: result.error || 'Error al crear la cuenta' });
+      }
+    } catch (error) {
+      setErrors({ submit: 'Error de conexión. Intenta de nuevo.' });
+    } finally {
       setIsLoading(false);
-      navigate('/dashboard');
-    }, 1000);
+    }
   };
 
   return (
@@ -248,6 +250,13 @@ const Register = () => {
                 </div>
                 {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
               </div>
+
+              {/* Mensaje de error general */}
+              {errors.submit && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {errors.submit}
+                </div>
+              )}
 
               <button
                 type="submit"

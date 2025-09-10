@@ -13,9 +13,10 @@ try:
 except Exception:
     pass
 
-from Server.api.endpoints import chat, routes, family, debug
-from Server.core.models.database import Database
-from Server.core.agents.raton_perez import raton_perez, RatonPerez
+# ✅ CORREGIR IMPORTS - cambiar imports relativos por rutas desde raíz
+from server.api.endpoints import chat, routes, family, debug
+from server.core.models.database import Database
+from server.core.agents.raton_perez import raton_perez, RatonPerez
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -126,7 +127,8 @@ def healthz():
     
     # Pinecone health
     try:
-        from Server.core.services.pinecone_service import pinecone_service
+        # ✅ CORREGIR TAMBIÉN ESTE IMPORT
+        from server.core.services.pinecone_service import pinecone_service
         if pinecone_service is not None:
             status["pinecone"] = pinecone_service.get_status()
         else:
@@ -196,4 +198,5 @@ async def internal_error_handler(request, exc):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("Server.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
+    # ✅ CAMBIAR TAMBIÉN ESTE PARA EJECUTAR DESDE RAÍZ
+    uvicorn.run("server.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
