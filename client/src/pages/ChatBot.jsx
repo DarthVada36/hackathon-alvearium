@@ -459,31 +459,45 @@ const ChatBot = () => {
               />
             </div>
 
-            {/* Botón Próximo Destino */}
-            <div className="flex justify-center">
-              <button
-                onClick={handleAdvanceToNextPOI}
-                disabled={isAdvancing || familyStatus.current_poi_index >= POIS_LIST.length}
-                className="flex items-center space-x-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-xl font-medium hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isAdvancing ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Avanzando...</span>
-                  </>
-                ) : familyStatus.current_poi_index >= POIS_LIST.length ? (
-                  <>
-                    <FiCheckCircle size={16} />
-                    <span>¡Ruta Completada!</span>
-                  </>
-                ) : (
-                  <>
-                    <FiMapPin size={16} />
-                    <span>Próximo destino: {POIS_LIST[familyStatus.current_poi_index + 1]?.name}</span>
-                  </>
-                )}
-              </button>
-            </div>
+           {/* Botón Próximo Destino / Fin de Ruta */}
+          <div className="flex justify-center">
+            <button
+              onClick={handleAdvanceToNextPOI}
+              disabled={isAdvancing || familyStatus.current_poi_index >= POIS_LIST.length}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium transition-colors ${
+                familyStatus.current_poi_index >= POIS_LIST.length
+                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white cursor-not-allowed'
+                  : familyStatus.current_poi_index === POIS_LIST.length - 1
+                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'
+                  : 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isAdvancing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Avanzando...</span>
+                </>
+              ) : familyStatus.current_poi_index >= POIS_LIST.length ? (
+                // 🎉 RUTA COMPLETADA - BOTÓN BLOQUEADO
+                <>
+                  <FiCheckCircle size={16} />
+                  <span>¡Ruta Completada!</span>
+                </>
+              ) : familyStatus.current_poi_index === POIS_LIST.length - 1 ? (
+                // 🏁 ÚLTIMO POI - BOTÓN PARA FINALIZAR
+                <>
+                  <FiTarget size={16} />
+                  <span>Finalizar Ruta</span>
+                </>
+              ) : (
+                // 🗺️ POI INTERMEDIO - MOSTRAR SIGUIENTE DESTINO
+                <>
+                  <FiMapPin size={16} />
+                  <span>Próximo: {POIS_LIST[familyStatus.current_poi_index + 1]?.name}</span>
+                </>
+              )}
+            </button>
+          </div>
           </div>
         )}
 
