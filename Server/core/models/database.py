@@ -1,5 +1,6 @@
 import psycopg2
 import psycopg2.extras
+from psycopg2.pool import SimpleConnectionPool
 import logging
 import os
 from supabase import create_client, Client
@@ -12,7 +13,8 @@ class Database:
 
     def __init__(self):
         self.supabase: Optional[Client] = None
-        self.connection: Optional[psycopg2.extensions.connection] = None
+        # Use a small connection pool for better resilience
+        self.pool: Optional[SimpleConnectionPool] = None
         self.connect()
 
     def connect(self):
@@ -29,11 +31,25 @@ class Database:
             logger.info("✅ Conexión a Supabase establecida mediante API")
 
             if service_role:
-                self.connection = psycopg2.connect(
-                    service_role,
-                    cursor_factory=psycopg2.extras.RealDictCursor
-                )
-                logger.info("✅ Conexión directa a PostgreSQL establecida")
+                try:
+                    # create a minimal pool (minconn=1, maxconn=5)
+                    self.pool = SimpleConnectionPool(
+                        1,
+                        5,
+                        dsn=service_role,
+                        cursor_factory=psycopg2.extras.RealDictCursor,
+                    )
+                    # verify by briefly acquiring a connection
+                    conn = self.pool.getconn()
+                    try:
+                        with conn.cursor() as cursor:
+                            cursor.execute("SELECT 1")
+                    finally:
+                        self.pool.putconn(conn)
+                    logger.info("✅ Connection pool to PostgreSQL established")
+                except Exception as e:
+                    logger.error(f"❌ Error creating PostgreSQL pool: {e}")
+                    self.pool = None
             else:
                 logger.warning("⚠️ No se proporcionó SUPABASE_SERVICE_ROLE: solo se usará la API de Supabase")
 
@@ -43,10 +59,14 @@ class Database:
 
     def health_check(self) -> bool:
         try:
-            if self.connection and not self.connection.closed:
-                with self.connection.cursor() as cursor:
-                    cursor.execute("SELECT 1")
-                    return True
+            if self.pool:
+                conn = self.pool.getconn()
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute("SELECT 1")
+                        return True
+                finally:
+                    self.pool.putconn(conn)
             if self.supabase:
                 self.supabase.table("families").select("*").limit(1).execute()
                 return True
@@ -56,32 +76,64 @@ class Database:
             return False
 
     def execute_query(self, query: str, params: tuple = None):
-        if not self.connection:
+        # Use pooled connection if available
+        if not self.pool:
             raise AttributeError("La conexión directa a PostgreSQL no está habilitada en Database.")
+
+        conn = None
         try:
-            with self.connection.cursor() as cursor:
+            conn = self.pool.getconn()
+            with conn.cursor() as cursor:
                 cursor.execute(query, params)
+                
+                # Always commit the transaction
+                conn.commit()
+                
+                # Return results if available
                 if cursor.description:
-                    return cursor.fetchall()
-                self.connection.commit()
+                    rows = cursor.fetchall()
+                    return rows
                 return None
         except Exception as e:
-            self.connection.rollback()
+            try:
+                if conn is not None:
+                    conn.rollback()
+            except Exception:
+                pass
             logger.error(f"Error ejecutando consulta: {e}")
             raise
+        finally:
+            if conn is not None:
+                try:
+                    self.pool.putconn(conn)
+                except Exception:
+                    pass
 
     def execute_transaction(self, queries: List[tuple]):
-        if not self.connection:
+        if not self.pool:
             raise AttributeError("La conexión directa a PostgreSQL no está habilitada en Database.")
+
+        conn = None
         try:
-            with self.connection.cursor() as cursor:
+            conn = self.pool.getconn()
+            with conn.cursor() as cursor:
                 for query, params in queries:
                     cursor.execute(query, params)
-            self.connection.commit()
+            conn.commit()
         except Exception as e:
-            self.connection.rollback()
+            try:
+                if conn is not None:
+                    conn.rollback()
+            except Exception:
+                pass
             logger.error(f"Error en transacción: {e}")
             raise
+        finally:
+            if conn is not None:
+                try:
+                    self.pool.putconn(conn)
+                except Exception:
+                    pass
 
     def supabase_select(self, table: str, query: dict = None):
         try:
@@ -102,9 +154,12 @@ class Database:
 
     def close(self):
         try:
-            if self.connection and not self.connection.closed:
-                self.connection.close()
-                logger.info("✅ Conexión a PostgreSQL cerrada")
+            if self.pool:
+                try:
+                    self.pool.closeall()
+                    logger.info("✅ PostgreSQL connection pool closed")
+                except Exception as e:
+                    logger.error(f"Error closing pool: {e}")
         except Exception as e:
             logger.error(f"Error cerrando conexión: {e}")
 

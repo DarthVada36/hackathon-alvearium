@@ -33,17 +33,34 @@ from Server.core.agents.location_helper import RATON_PEREZ_ROUTE
 class RatonPerez:
     """Orquestador principal del Ratoncito Pérez con búsquedas vectoriales"""
     
+    # Variable de clase para controlar la inicialización global
+    _knowledge_initialized = False
+    _initialization_lock = False
+    
     def __init__(self, db):
         self.settings = langchain_settings
         self.db = db
         
-        # Inicializar base de conocimiento
-        logger.info("🧠 Inicializando base de conocimiento...")
-        knowledge_ready = ensure_knowledge_initialized()
-        if knowledge_ready:
-            logger.info("✅ Base de conocimiento lista")
+        # Inicializar base de conocimiento solo una vez por proceso
+        if not RatonPerez._knowledge_initialized and not RatonPerez._initialization_lock:
+            RatonPerez._initialization_lock = True
+            logger.info("🧠 Inicializando base de conocimiento...")
+            try:
+                knowledge_ready = ensure_knowledge_initialized()
+                RatonPerez._knowledge_initialized = knowledge_ready
+                if knowledge_ready:
+                    logger.info("✅ Base de conocimiento lista")
+                else:
+                    logger.warning("⚠️ Base de conocimiento en modo fallback")
+            except Exception as e:
+                logger.error(f"❌ Error inicializando base de conocimiento: {e}")
+                RatonPerez._knowledge_initialized = False
+            finally:
+                RatonPerez._initialization_lock = False
+        elif RatonPerez._knowledge_initialized:
+            logger.debug("✅ Base de conocimiento ya inicializada")
         else:
-            logger.warning("⚠️ Base de conocimiento en modo fallback")
+            logger.debug("⏳ Inicialización de base de conocimiento en progreso...")
         
         logger.info("✅ Ratoncito Pérez inicializado")
 

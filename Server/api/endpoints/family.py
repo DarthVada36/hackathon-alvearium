@@ -20,37 +20,53 @@ async def create_family(family_data: FamilyCreate, db: Database = Depends(get_db
     Crear una nueva familia
     """
     try:
+        # Por ahora usamos user_id = 1 para desarrollo (sin autenticación)
+        # TODO: Implementar autenticación real y obtener user_id del token
+        default_user_id = 1
+        
         family_query = """
-            INSERT INTO families (name, preferred_language)
-            VALUES (%s, %s)
+            INSERT INTO families (user_id, name, preferred_language)
+            VALUES (%s, %s, %s)
             RETURNING id, name, preferred_language, created_at
         """
         family_result = db.execute_query(
             family_query,
-            (family_data.name, family_data.preferred_language),
+            (default_user_id, family_data.name, family_data.preferred_language),
         )
 
         if not family_result:
             raise HTTPException(status_code=500, detail="Error creando familia")
 
         family_id = family_result[0]["id"]
+        logger.info(f"Family created with ID: {family_id}")
 
-        members_queries = []
+        # Insertar miembros uno por uno para mejor control de errores
         for member in family_data.members:
-            members_queries.append(
-                (
-                    "INSERT INTO family_members (family_id, name, age, member_type) VALUES (%s, %s, %s, %s)",
-                    (family_id, member.name, member.age, member.member_type),
+            member_query = """
+                INSERT INTO family_members (family_id, name, age, member_type) 
+                VALUES (%s, %s, %s, %s)
+            """
+            try:
+                db.execute_query(
+                    member_query,
+                    (family_id, member.name, member.age, member.member_type)
                 )
-            )
+                logger.info(f"Member '{member.name}' added to family {family_id}")
+            except Exception as e:
+                logger.error(f"Error adding member '{member.name}': {e}")
+                raise HTTPException(status_code=500, detail=f"Error adding member {member.name}: {str(e)}")
 
-        db.execute_transaction(members_queries)
-
+        # Crear progreso de ruta
         progress_query = """
             INSERT INTO family_route_progress (family_id, current_poi_index, points_earned)
             VALUES (%s, 0, 0)
         """
-        db.execute_query(progress_query, (family_id,))
+        try:
+            db.execute_query(progress_query, (family_id,))
+            logger.info(f"Route progress created for family {family_id}")
+        except Exception as e:
+            logger.warning(f"Could not create route progress for family {family_id}: {e}")
+            # No fallar si no se puede crear el progreso
 
         result_query = """
             SELECT f.id, f.name, f.preferred_language, f.created_at,

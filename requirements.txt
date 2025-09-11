@@ -1,26 +1,52 @@
-## Web framework
-fastapi
-uvicorn[standard]
+## Pinned runtime dependencies used during development
+# These pins were captured from the project's .venv on Windows to help
+# reproducible installs for teammates. If you use Docker, consider
+# keeping Python minor version consistent (recommend Python 3.11).
 
-## Env & settings
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+
+# Environment files
 python-dotenv==1.0.1
 
-## HTTP and utilities
-requests
+# HTTP + utilities
+requests==2.32.5
 
-## Caching
-redis
+# Caching / queue
+redis==6.4.0
 
-## Database
+# Database (Postgres binary wheel) - pinned to match tested venv
 psycopg2-binary==2.9.5
 
-## Vector DB & Embeddings (serverless v3)
+# Vector DB & Embeddings
 pinecone==4.1.0
 sentence-transformers==2.2.2
-faiss-cpu==1.8.0.post1
+# faiss-cpu wheel pinned to a Windows-compatible release observed in .venv
+faiss-cpu==1.9.0.post1
 
-## Optional providers/APIs
-googlemaps
-langchain-openai
-python-dotenv==1.0.1
+# LangChain + Groq integrations
+langchain-groq==0.3.8
+langchain-openai==0.3.33
+langchain-core==0.3.76
+groq==0.31.1
+
+# Supabase client
+supabase==2.18.1
+
+# OpenAI (optional provider usage)
+openai==1.107.1
+
+# Utilities and ML infra (common extras used by embeddings / models)
+numpy==2.3.3
+torch==2.8.0
+transformers==4.56.1
+sentencepiece==0.2.1
+
+# Optional third-party APIs used in some modules
+googlemaps==4.10.0
+
+# Notes:
+# - If installation fails on Windows due to binary wheel incompatibilities, prefer
+#   using Python 3.11 (matching the environment used to capture these pins), or
+#   run the app inside Docker where wheels are pre-built.
 

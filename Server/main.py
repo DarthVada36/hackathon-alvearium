@@ -14,10 +14,32 @@ try:
 except Exception:
     pass
 
-# Pinecone health service (optional)
-try:  # pragma: no cover
-    from Server.core.services.pinecone_service import pinecone_service
+# Diagnostic: print masked env var presence (safe, no full secrets)
+def _mask(v: str | None, keep: int = 6) -> str:
+    if not v:
+        return "(not set)"
+    s = str(v)
+    if len(s) <= keep:
+        return "*" * len(s)
+    return s[:keep] + "..." + s[-2:]
+
+import builtins
+try:
+    sup_url = os.getenv("SUPABASE_URL")
+    sup_pub = os.getenv("SUPABASE_PUBLIC_KEY")
+    sup_role = os.getenv("SUPABASE_SERVICE_ROLE")
+    pine_key = os.getenv("PINECONE_API_KEY")
+    # Use logger later; print early so visible during uvicorn reload
+    print(f"[env diag] SUPABASE_URL={_mask(sup_url)} SUPABASE_PUBLIC_KEY={_mask(sup_pub)} SUPABASE_SERVICE_ROLE={'set' if sup_role else '(not set)'} PINECONE_API_KEY={'set' if pine_key else '(not set)'}")
 except Exception:
+    pass
+
+# Pinecone health service (optional) - import getter for lazy init
+try:  # pragma: no cover
+    from Server.core.services.pinecone_service import get_pinecone_service
+    pinecone_service = None
+except Exception:
+    get_pinecone_service = None
     pinecone_service = None
 
 # App + lifespan (DB wiring)
@@ -101,9 +123,11 @@ async def health_check(request: Request):
     }
     # Pinecone + Redis health
     try:
-        status["pinecone"] = (
-            pinecone_service.get_status() if pinecone_service is not None else {"available": False}
-        )
+        if get_pinecone_service is not None:
+            svc = get_pinecone_service()
+            status["pinecone"] = svc.get_status()
+        else:
+            status["pinecone"] = {"available": False}
     except Exception as e:
         status["pinecone"] = {"error": str(e)}
     try:
@@ -130,12 +154,10 @@ def healthz():
     
     # Pinecone health
     try:
-        # ✅ CORREGIR TAMBIÉN ESTE IMPORT
-        from Server.core.services.pinecone_service import pinecone_service
-        if pinecone_service is not None:
-            status["pinecone"] = pinecone_service.get_status()
-        else:
-            status["pinecone"] = {"available": False, "reason": "service not imported"}
+        # Use lazy getter to ensure consistent initialization
+        from Server.core.services.pinecone_service import get_pinecone_service
+        svc = get_pinecone_service()
+        status["pinecone"] = svc.get_status() if svc is not None else {"available": False, "reason": "service not imported"}
     except Exception as e:
         status["pinecone"] = {"available": False, "error": str(e)}
 

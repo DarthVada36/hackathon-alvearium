@@ -310,13 +310,21 @@ class PineconeService:
 			return []
 
 
-# Exported instance used by the app
-pinecone_service = PineconeService()
+# Lazy getter for exported instance used by the app. This avoids import-time
+# initialization races (useful when running uvicorn reloaders).
+_pinecone_service_instance: Optional[PineconeService] = None
 
 
-# ---- Module-level helpers expected by tests ----
+def get_pinecone_service() -> PineconeService:
+	global _pinecone_service_instance
+	if _pinecone_service_instance is None:
+		_pinecone_service_instance = PineconeService()
+	return _pinecone_service_instance
+
+
+# ---- Module-level helpers expected by tests (use getter) ----
 def embed_texts(texts: List[str]) -> List[List[float]]:
-	return pinecone_service.embed_texts(texts)
+	return get_pinecone_service().embed_texts(texts)
 
 
 def upsert_location_embeddings(items: List[Dict[str, Any]], namespace: Optional[str] = None) -> Any:
@@ -325,13 +333,13 @@ def upsert_location_embeddings(items: List[Dict[str, Any]], namespace: Optional[
 		{"id": it["id"], "values": it["embedding"], "metadata": it.get("metadata")}
 		for it in items
 	]
-	return pinecone_service.upsert_vectors(vectors, namespace=namespace)
+	return get_pinecone_service().upsert_vectors(vectors, namespace=namespace)
 
 
 def query_location_embedding(embedding: List[float], top_k: int = 2, namespace: Optional[str] = None) -> Any:
-	return pinecone_service.query(embedding, top_k=top_k, namespace=namespace)
+	return get_pinecone_service().query(embedding, top_k=top_k, namespace=namespace)
 
 
 def delete_location_embeddings(ids: List[str], namespace: Optional[str] = None) -> Any:
-	return pinecone_service.delete(ids=ids, namespace=namespace)
+	return get_pinecone_service().delete(ids=ids, namespace=namespace)
 

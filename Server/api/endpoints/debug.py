@@ -32,9 +32,9 @@ def debug_redis():
 @router.get("/pinecone")
 def debug_pinecone():
     try:
-        from Server.core.services.pinecone_service import pinecone_service
-
-        return pinecone_service.get_status()
+        from Server.core.services.pinecone_service import get_pinecone_service
+        svc = get_pinecone_service()
+        return svc.get_status() if svc is not None else {"available": False, "reason": "service not imported"}
     except Exception as e:  # pragma: no cover
         return {"available": False, "error": str(e)}
 
@@ -48,9 +48,63 @@ def debug_wikipedia(title: str = Query(..., description="Page title, e.g., 'Plaz
             "status_code": r.status_code,
             "title": r.json().get("title") if r.headers.get("content-type","{}").startswith("application/json") else None,
             "extract_len": len(r.json().get("extract","")) if r.status_code == 200 else 0,
+            "url": url
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+@router.get("/knowledge-cache")
+def debug_knowledge_cache():
+    """Obtiene estadísticas del cache de Wikipedia y estado de inicialización"""
+    try:
+        from Server.core.agents.madrid_knowledge import get_cache_stats
+        return get_cache_stats()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/knowledge-refresh")
+def debug_knowledge_refresh():
+    """Fuerza una actualización completa de la base de conocimiento"""
+    try:
+        from Server.core.agents.madrid_knowledge import force_knowledge_refresh
+        success = force_knowledge_refresh()
+        return {
+            "success": success,
+            "message": "Actualización completa iniciada" if success else "Error en la actualización"
+        }
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+
+@router.post("/clear-wiki-cache")
+def debug_clear_cache():
+    """Limpia el cache de Wikipedia"""
+    try:
+        from Server.core.services.madrid_apis import clear_wikipedia_cache
+        clear_wikipedia_cache()
+        return {"success": True, "message": "Cache limpiado"}
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+
+@router.get("/test-wikipedia")
+def debug_test_wikipedia(poi_name: str = Query(..., description="Nombre del POI a probar")):
+    """Prueba la conexión a Wikipedia para un POI específico"""
+    try:
+        from Server.core.agents.madrid_knowledge import fetch_wikipedia_content
+        result = fetch_wikipedia_content(poi_name, use_cache=False)
+        return {
+            "poi_name": poi_name,
+            "success": bool(result.get("basic_info")),
+            "content_length": len(result.get("basic_info", "")),
+            "title": result.get("title", ""),
+            "has_source_url": bool(result.get("source_url", "")),
+            "content_preview": result.get("basic_info", "")[:200] + "..." if len(result.get("basic_info", "")) > 200 else result.get("basic_info", "")
+        }
+    except Exception as e:
+        return {"error": str(e), "success": False}
 
 
 @router.get("/geocode")

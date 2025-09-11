@@ -1,54 +1,60 @@
 import pytest
-from Server.core.services.pinecone_service import pinecone_service, embed_texts, upsert_location_embeddings, query_location_embedding, delete_location_embeddings
+from Server.core.services.pinecone_service import get_pinecone_service, embed_texts, upsert_location_embeddings, query_location_embedding, delete_location_embeddings
 
 SAMPLE_TEXT = "Madrid is the capital of Spain."
 SAMPLE_TEXTS = ["Madrid is the capital of Spain.", "Barcelona is a city in Spain."]
 
 @pytest.mark.parametrize("text", [SAMPLE_TEXT])
 def test_embed_text(text):
-    vec = pinecone_service.embed_text(text)
+    svc = get_pinecone_service()
+    vec = svc.embed_text(text)
     assert isinstance(vec, list)
     assert len(vec) > 0
 
 
 def test_embed_texts():
-    vecs = pinecone_service.embed_texts(SAMPLE_TEXTS)
+    svc = get_pinecone_service()
+    vecs = svc.embed_texts(SAMPLE_TEXTS)
     assert isinstance(vecs, list)
     assert len(vecs) == len(SAMPLE_TEXTS)
     assert all(isinstance(v, list) for v in vecs)
 
 
 def test_upsert_and_query():
-    vecs = pinecone_service.embed_texts(SAMPLE_TEXTS)
-    upserted = pinecone_service.upsert_vectors([
+    svc = get_pinecone_service()
+    vecs = svc.embed_texts(SAMPLE_TEXTS)
+    upserted = svc.upsert_vectors([
         {"id": f"test_{i}", "values": vec, "metadata": {"text": txt}}
         for i, (vec, txt) in enumerate(zip(vecs, SAMPLE_TEXTS))
     ])
     assert upserted is not None
-    results = pinecone_service.query(vecs[0], top_k=2)
+    results = svc.query(vecs[0], top_k=2)
     assert isinstance(results, list)
     assert len(results) > 0
 
 
 def test_delete():
-    vecs = pinecone_service.embed_texts(SAMPLE_TEXTS)
+    svc = get_pinecone_service()
+    vecs = svc.embed_texts(SAMPLE_TEXTS)
     ids = [f"del_{i}" for i in range(len(vecs))]
-    pinecone_service.upsert_vectors([
+    svc.upsert_vectors([
         {"id": id_, "values": vec, "metadata": {"text": txt}}
         for id_, vec, txt in zip(ids, vecs, SAMPLE_TEXTS)
     ])
-    deleted = pinecone_service.delete(ids)
+    deleted = svc.delete(ids)
     assert deleted is not None
 
 
 def test_get_index_stats():
-    stats = pinecone_service.get_index_stats()
+    svc = get_pinecone_service()
+    stats = svc.get_index_stats()
     assert isinstance(stats, dict)
     assert "vectors_stored" in stats or "namespaces" in stats
 
 
 def test_health_check():
-    status = pinecone_service.get_status()
+    svc = get_pinecone_service()
+    status = svc.get_status()
     assert isinstance(status, dict)
     assert "pinecone_available" in status
     assert "faiss_available" in status

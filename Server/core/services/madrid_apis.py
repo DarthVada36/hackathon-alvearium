@@ -1,9 +1,54 @@
 import os
 import logging
 import requests
+import time
 from typing import List, Dict, Optional, Any
 from datetime import datetime
+from urllib.parse import quote
 from pinecone import Pinecone, ServerlessSpec
+
+# Cache para evitar requests repetidos de Wikipedia
+_wikipedia_cache: Dict[str, Dict[str, Any]] = {}
+_cache_expiry: Dict[str, float] = {}
+CACHE_DURATION = 3600  # 1 hora
+
+# ---------------- Funciones de utilidad para caché ----------------
+def clear_wikipedia_cache():
+    """Limpia completamente el caché de Wikipedia"""
+    global _wikipedia_cache, _cache_expiry
+    _wikipedia_cache.clear()
+    _cache_expiry.clear()
+    logging.info("Caché de Wikipedia limpiado completamente")
+
+def get_wikipedia_cache_info() -> Dict[str, Any]:
+    """Obtiene información sobre el estado del caché de Wikipedia"""
+    current_time = time.time()
+    cache_info = {
+        'total_entries': len(_wikipedia_cache),
+        'valid_entries': 0,
+        'expired_entries': 0,
+        'entries': []
+    }
+    
+    for poi_name, cache_data in _wikipedia_cache.items():
+        expiry_time = _cache_expiry.get(poi_name, 0)
+        is_valid = current_time < expiry_time
+        
+        if is_valid:
+            cache_info['valid_entries'] += 1
+        else:
+            cache_info['expired_entries'] += 1
+        
+        cache_info['entries'].append({
+            'poi_name': poi_name,
+            'success': cache_data.get('success', False),
+            'timestamp': cache_data.get('timestamp', 0),
+            'expires_at': expiry_time,
+            'is_valid': is_valid,
+            'variant_used': cache_data.get('variant_used', 'N/A')
+        })
+    
+    return cache_info
 try:
     import googlemaps  # type: ignore
 except Exception:
@@ -102,8 +147,170 @@ class MadridPlace:
         self.embedding: Optional[List[float]] = None
         self.metadata: Dict = {}
 
-    # ---------- API Calls ----------
-    def fetch_wikipedia_summary(self):
+    def _clean_poi_name_for_wikipedia(self, poi_name: str) -> List[str]:
+        """
+        Limpia y normaliza el nombre del POI para búsqueda en Wikipedia.
+        Devuelve múltiples variantes para mejorar las posibilidades de éxito.
+        """
+        if not poi_name:
+            return []
+        
+        # Removemos caracteres problemáticos y normalizamos
+        base_clean = poi_name.strip()
+        
+        # Múltiples variantes para buscar
+        variants = []
+        
+        # 1. Nombre original limpio
+        variants.append(base_clean)
+        
+        # 2. Sin "(Madrid)" o similar
+        import re
+        without_parentheses = re.sub(r'\s*\([^)]*\)\s*', '', base_clean).strip()
+        if without_parentheses and without_parentheses != base_clean:
+            variants.append(without_parentheses)
+        
+        # 3. Con "Madrid" al final si no lo tiene
+        if "madrid" not in base_clean.lower() and "madrid" not in without_parentheses.lower():
+            variants.append(f"{without_parentheses} Madrid")
+            variants.append(f"{without_parentheses} (Madrid)")
+        
+        # 4. Versiones especiales para lugares conocidos
+        special_cases = {
+            "palacio real": ["Palacio Real de Madrid", "Real Alcázar de Madrid"],
+            "teatro real": ["Teatro Real de Madrid", "Teatro Real (Madrid)"],
+            "puerta del sol": ["Puerta del Sol (Madrid)", "Puerta del Sol"],
+            "plaza mayor": ["Plaza Mayor de Madrid", "Plaza Mayor (Madrid)"],
+            "retiro": ["Parque del Retiro", "Parque del Buen Retiro"],
+            "prado": ["Museo del Prado", "Museo Nacional del Prado"],
+            "reina sofia": ["Museo Reina Sofía", "Museo Nacional Reina Sofía"],
+            "thyssen": ["Museo Thyssen-Bornemisza", "Thyssen-Bornemisza"],
+        }
+        
+        poi_lower = base_clean.lower()
+        for key, alternatives in special_cases.items():
+            if key in poi_lower:
+                variants.extend(alternatives)
+        
+        # Eliminamos duplicados manteniendo el orden
+        seen = set()
+        unique_variants = []
+        for variant in variants:
+            if variant and variant not in seen:
+                seen.add(variant)
+                unique_variants.append(variant)
+        
+        return unique_variants
+
+    def fetch_wikipedia_summary(self, poi_name: Optional[str] = None) -> Optional[str]:
+        """
+        Obtiene el resumen de Wikipedia para un POI con manejo robusto de errores,
+        caché y múltiples estrategias de búsqueda.
+        """
+        # Usar el nombre del POI pasado como parámetro o el nombre de la instancia
+        name_to_search = poi_name or self.name
+        
+        if not name_to_search:
+            return None
+        
+        # Verificar caché
+        current_time = time.time()
+        if name_to_search in _wikipedia_cache and name_to_search in _cache_expiry:
+            if current_time < _cache_expiry[name_to_search]:
+                logging.info(f"Wikipedia cache hit para '{name_to_search}'")
+                cached_result = _wikipedia_cache[name_to_search]
+                if cached_result.get('success'):
+                    summary = cached_result.get('summary')
+                    # Si no se pasó parámetro, almacenar en sources
+                    if not poi_name:
+                        self.sources['wikipedia'] = summary
+                    return summary
+                else:
+                    return None
+        
+        # Obtener variantes del nombre
+        poi_variants = self._clean_poi_name_for_wikipedia(name_to_search)
+        
+        if not poi_variants:
+            logging.warning(f"No se pudieron generar variantes para el POI: {name_to_search}")
+            return None
+        
+        logging.info(f"Buscando Wikipedia para '{name_to_search}' con {len(poi_variants)} variantes: {poi_variants}")
+        
+        # Intentar con cada variante
+        for i, variant in enumerate(poi_variants):
+            try:
+                # URL de la API de Wikipedia en español
+                encoded_variant = quote(variant)
+                url = f"https://es.wikipedia.org/api/rest_v1/page/summary/{encoded_variant}"
+                
+                # Headers para simular navegador
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'application/json',
+                    'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
+                }
+                
+                # Request con timeout
+                response = requests.get(url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Verificar que tenemos contenido útil
+                    if 'extract' in data and data['extract']:
+                        summary = data['extract'].strip()
+                        
+                        # Verificar que no sea una página de desambiguación
+                        if len(summary) > 50 and not summary.lower().startswith('puede referirse a'):
+                            logging.info(f"✅ Wikipedia éxito con variante '{variant}' (intento {i+1}/{len(poi_variants)})")
+                            logging.info(f"Resumen obtenido: {len(summary)} caracteres")
+                            
+                            # Guardar en caché
+                            _wikipedia_cache[name_to_search] = {
+                                'success': True,
+                                'summary': summary,
+                                'variant_used': variant,
+                                'timestamp': current_time
+                            }
+                            _cache_expiry[name_to_search] = current_time + CACHE_DURATION
+                            
+                            # Si no se pasó parámetro, almacenar en sources
+                            if not poi_name:
+                                self.sources['wikipedia'] = summary
+                            
+                            return summary
+                        else:
+                            logging.warning(f"Contenido muy corto o desambiguación para '{variant}': {summary[:100]}...")
+                    
+                elif response.status_code == 404:
+                    logging.info(f"Página no encontrada para variante '{variant}' (intento {i+1}/{len(poi_variants)})")
+                else:
+                    logging.warning(f"Error HTTP {response.status_code} para variante '{variant}': {response.text[:200]}")
+                    
+            except requests.exceptions.Timeout:
+                logging.warning(f"Timeout en Wikipedia para variante '{variant}' (intento {i+1}/{len(poi_variants)})")
+            except requests.exceptions.RequestException as e:
+                logging.warning(f"Error de conexión en Wikipedia para variante '{variant}': {str(e)}")
+            except Exception as e:
+                logging.error(f"Error inesperado al buscar '{variant}' en Wikipedia: {str(e)}")
+        
+        # Si llegamos aquí, ninguna variante funcionó
+        logging.warning(f"❌ No se pudo obtener información de Wikipedia para '{name_to_search}' con ninguna de las {len(poi_variants)} variantes")
+        
+        # Guardar resultado negativo en caché (pero por menos tiempo)
+        _wikipedia_cache[name_to_search] = {
+            'success': False,
+            'summary': None,
+            'variants_tried': poi_variants,
+            'timestamp': current_time
+        }
+        _cache_expiry[name_to_search] = current_time + (CACHE_DURATION // 4)  # 15 minutos para reintentos
+        
+        return None
+
+    def fetch_wikipedia_summary_old(self):
+        """Método antiguo - DEPRECADO: usar fetch_wikipedia_summary() en su lugar"""
         try:
             url = f"{API_ENDPOINTS['wikipedia']}{self.name.replace(' ', '_')}"
             r = requests.get(url)
