@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
-  User, 
-  Users, 
-  Plus, 
-  Trash2, 
-  Check, 
-  Globe, 
-  Mail, 
-  Lock, 
-  Eye, 
-  EyeOff,
-  AlertCircle,
-  Info
-} from 'lucide-react';
+  FiUser as User, 
+  FiUsers as Users, 
+  FiPlus as Plus, 
+  FiTrash2 as Trash2, 
+  FiCheck as Check, 
+  FiGlobe as Globe, 
+  FiMail as Mail, 
+  FiLock as Lock, 
+  FiEye as Eye, 
+  FiEyeOff as EyeOff,
+  FiAlertCircle as AlertCircle,
+  FiInfo as Info
+} from 'react-icons/fi';
 import Header from '../components/Header';
 import ApiService from '../services/ApiService';
+import { useAuth } from '../context/AuthContext';
 import ratonSaco from '../assets/img/raton-saco.png';
 import icon1 from '../assets/img/icon1png.png';
 import icon2 from '../assets/img/icon2.png';
@@ -43,6 +44,7 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   // Opciones de idioma - SIN EMOJIS Y MÁS COMPACTAS
   const languages = [
@@ -235,7 +237,21 @@ const Register = () => {
     setSuccess('');
 
     try {
-      // Preparar datos para enviar al backend
+      // PASO 1: Registrar usuario
+      const userRegistrationData = {
+        email: formData.email,
+        password: formData.password,
+        avatar: formData.avatar
+      };
+
+      const registerResult = await register(userRegistrationData);
+      
+      if (!registerResult.success) {
+        setErrors({ submit: registerResult.error });
+        return;
+      }
+
+      // PASO 2: Crear familia (ahora que estamos autenticados)
       const familyData = {
         name: formData.name,
         preferred_language: formData.preferred_language,
@@ -245,24 +261,23 @@ const Register = () => {
         }))
       };
 
-      const response = await ApiService.createFamily(familyData);
+      const familyResponse = await ApiService.createFamily(familyData);
       
-      setSuccess('¡Familia creada exitosamente! Redirigiendo al dashboard...');
+      setSuccess('¡Usuario y familia creados exitosamente! Redirigiendo...');
       
-      // Esperar un momento y redirigir
       setTimeout(() => {
         navigate('/dashboard', { 
           state: { 
-            newFamily: response,
+            newFamily: familyResponse,
             message: 'Bienvenidos al mundo del Ratoncito Pérez Digital' 
           } 
         });
       }, 2000);
       
     } catch (error) {
-      console.error('Error creating family:', error);
+      console.error('Error during registration:', error);
       setErrors({ 
-        submit: error.message || 'Error al crear la familia. Por favor, intenta de nuevo.' 
+        submit: error.message || 'Error al crear usuario y familia. Por favor, intenta de nuevo.' 
       });
     } finally {
       setIsLoading(false);

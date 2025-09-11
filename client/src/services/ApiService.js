@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 class ApiService {
   constructor() {
@@ -22,13 +22,55 @@ class ApiService {
       const response = await fetch(url, config);
       
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
       
       return await response.json();
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
+    }
+  }
+
+  // ============ AUTH ENDPOINTS ============
+  async register(userData) {
+    const response = await this.request('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(userData),
+    });
+    
+    // Guardar token automáticamente
+    if (response.access_token) {
+      localStorage.setItem('raton_perez_token', response.access_token);
+    }
+    
+    return response;
+  }
+
+  async login(email, password) {
+    const response = await this.request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    
+    // Guardar token automáticamente
+    if (response.access_token) {
+      localStorage.setItem('raton_perez_token', response.access_token);
+    }
+    
+    return response;
+  }
+
+  async getCurrentUser() {
+    return this.request('/api/auth/me');
+  }
+
+  async logout() {
+    try {
+      await this.request('/api/auth/logout', { method: 'POST' });
+    } finally {
+      localStorage.removeItem('raton_perez_token');
     }
   }
 
@@ -50,10 +92,10 @@ class ApiService {
   }
 
   // Chat endpoints
-  async sendChatMessage(message, context = {}) {
+  async sendChatMessage(messageData) {
     return this.request('/api/chat/message', {
       method: 'POST',
-      body: JSON.stringify({ message, context }),
+      body: JSON.stringify(messageData),
     });
   }
 

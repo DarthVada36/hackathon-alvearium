@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import ApiService from '../services/ApiService';
 
 const AuthContext = createContext();
 
@@ -14,20 +15,20 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // ✅ Cargar usuario desde localStorage al iniciar
+  // ✅ Cargar usuario desde localStorage y verificar con backend al iniciar
   useEffect(() => {
-    const loadUserFromStorage = () => {
+    const initializeAuth = async () => {
       try {
-        const storedUser = localStorage.getItem('raton_perez_user');
         const storedToken = localStorage.getItem('raton_perez_token');
         
-        if (storedUser && storedToken) {
-          const userData = JSON.parse(storedUser);
-          setUser(userData);
+        if (storedToken) {
+          // Verificar token con backend
+          const userData = await ApiService.getCurrentUser();
+          setUser(userData.user);
         }
       } catch (error) {
-        console.error('Error loading user from storage:', error);
-        // Limpiar datos corruptos
+        console.error('Error loading user from backend:', error);
+        // Token inválido, limpiar datos
         localStorage.removeItem('raton_perez_user');
         localStorage.removeItem('raton_perez_token');
       } finally {
@@ -35,7 +36,7 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    loadUserFromStorage();
+    initializeAuth();
   }, []);
 
   // ✅ Guardar usuario en localStorage cuando cambie
@@ -52,39 +53,17 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // TODO: Conectar con backend real - ApiService.login(email, password)
-      const mockResponse = await new Promise(resolve => {
-        setTimeout(() => {
-          if (email === 'test@test.com' && password === 'password') {
-            resolve({
-              success: true,
-              user: {
-                id: 1,
-                name: 'Usuario de Prueba',
-                email: email,
-                avatar: 'icon1',
-                points: 0,
-                level: 1,
-                visitedPlaces: [],
-                createdAt: new Date().toISOString()
-              },
-              token: 'mock_jwt_token_' + Date.now()
-            });
-          } else {
-            resolve({ success: false, error: 'Credenciales inválidas' });
-          }
-        }, 1000);
-      });
-
-      if (mockResponse.success) {
-        setUser(mockResponse.user);
-        localStorage.setItem('raton_perez_token', mockResponse.token);
+      const response = await ApiService.login(email, password);
+      
+      if (response.access_token && response.user) {
+        setUser(response.user);
         return { success: true };
       } else {
-        return { success: false, error: mockResponse.error };
+        return { success: false, error: 'Respuesta inválida del servidor' };
       }
     } catch (error) {
-      return { success: false, error: 'Error de conexión' };
+      console.error('Login error:', error);
+      return { success: false, error: error.message || 'Error al iniciar sesión' };
     } finally {
       setIsLoading(false);
     }
@@ -94,52 +73,37 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // TODO: Conectar con backend real - ApiService.register(userData)
-      const mockResponse = await new Promise(resolve => {
-        setTimeout(() => {
-          resolve({
-            success: true,
-            user: {
-              id: Date.now(),
-              name: userData.name,
-              email: userData.email,
-              avatar: userData.avatar || 'icon1',
-              points: 0,
-              level: 1,
-              visitedPlaces: [],
-              createdAt: new Date().toISOString()
-            },
-            token: 'mock_jwt_token_' + Date.now()
-          });
-        }, 1000);
-      });
-
-      if (mockResponse.success) {
-        setUser(mockResponse.user);
-        localStorage.setItem('raton_perez_token', mockResponse.token);
+      const response = await ApiService.register(userData);
+      
+      if (response.access_token && response.user) {
+        setUser(response.user);
         return { success: true };
       } else {
         return { success: false, error: 'Error en el registro' };
       }
     } catch (error) {
-      return { success: false, error: 'Error de conexión' };
+      console.error('Register error:', error);
+      return { success: false, error: error.message || 'Error en el registro' };
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('raton_perez_user');
-    localStorage.removeItem('raton_perez_token');
+  const logout = async () => {
+    try {
+      await ApiService.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+    }
   };
 
   const updateUserPoints = (points) => {
     if (user) {
       const updatedUser = {
         ...user,
-        points: user.points + points,
-        level: Math.floor((user.points + points) / 100) + 1
+        points: (user.points || 0) + points,
       };
       setUser(updatedUser);
     }
