@@ -158,7 +158,7 @@ const Home = () => {
                     to="/login"
                     className="text-amber-600 hover:text-amber-700 font-medium underline hover:no-underline transition-all"
                   >
-                    Ya tengo mi familia
+                    Inicia sesión
                   </Link>
                 </p>
               </div>
