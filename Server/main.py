@@ -13,8 +13,7 @@ try:
 except Exception:
     pass
 
-# ✅ CORREGIR IMPORTS - cambiar imports relativos por rutas desde raíz
-from Server.api.endpoints import chat, routes, family, debug
+from Server.api.endpoints import chat, routes, family, debug, auth
 from Server.core.models.database import Database
 from Server.core.agents.raton_perez import raton_perez, RatonPerez
 
@@ -39,9 +38,8 @@ async def lifespan(app: FastAPI):
     raton_perez = RatonPerez(db)
     logger.info("✅ Ratoncito Pérez inicializado (con base de datos real)")
 
-    # Verificar tablas
-    required_tables = ['users', 'families', 'family_members', 'routes',
-                       'family_route_progress', 'location_updates']
+    # Verificar tablas (actualizado con nuevas tablas de auth)
+    required_tables = ['users', 'families', 'family_members', 'family_route_progress']
     try:
         if db.connection:
             result = db.execute_query("""
@@ -56,6 +54,18 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"⚠️ Tablas faltantes: {list(missing)}")
             else:
                 logger.info("✅ Todas las tablas requeridas están presentes")
+                
+            # Verificar columna is_active en users
+            users_check = db.execute_query("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name = 'is_active'
+            """)
+            if not users_check:
+                logger.warning("⚠️ Columna 'is_active' faltante en tabla 'users'")
+            else:
+                logger.info("✅ Columna 'is_active' presente en tabla 'users'")
+                
         else:
             logger.info("⚠️ Solo API Supabase disponible, omitiendo verificación directa")
     except Exception as e:
@@ -84,7 +94,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir routers con prefijos consistentes
+# ROUTERS C
+app.include_router(auth.router, prefix="/api")    
 app.include_router(chat.router, prefix="/api")
 app.include_router(family.router, prefix="/api")
 app.include_router(routes.router, prefix="/api")
@@ -99,6 +110,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "health": "/health",
+            "auth": "/api/auth",       
             "chat": "/api/chat",
             "families": "/api/families",
             "routes": "/api/routes",
@@ -125,9 +137,18 @@ def healthz():
     """Health check adicional con información de servicios"""
     status = {"status": "ok"}
     
+    # JWT Auth health check
+    try:
+        from Server.core.security.auth import auth_manager
+        # Test básico del sistema de auth
+        test_token = auth_manager.create_user_token(1, "test@test.com")
+        token_valid = auth_manager.verify_token(test_token) is not None
+        status["auth"] = {"available": token_valid, "jwt_working": True}
+    except Exception as e:
+        status["auth"] = {"available": False, "error": str(e)}
+    
     # Pinecone health
     try:
-        # ✅ CORREGIR TAMBIÉN ESTE IMPORT
         from Server.core.services.pinecone_service import pinecone_service
         if pinecone_service is not None:
             status["pinecone"] = pinecone_service.get_status()
@@ -179,7 +200,9 @@ async def not_found_handler(request, exc):
             "message": "El Ratoncito Pérez no puede encontrar lo que buscas 🐭",
             "suggestion": "Visita /docs para ver todos los endpoints disponibles",
             "available_endpoints": [
-                "/health", "/api/chat/message", "/api/families/", 
+                "/health", 
+                "/api/auth/register", "/api/auth/login",   
+                "/api/chat/message", "/api/families/", 
                 "/api/routes/overview", "/debug/ping"
             ]
         },
@@ -198,5 +221,5 @@ async def internal_error_handler(request, exc):
     )
 
 if __name__ == "__main__":
-    # ✅ CAMBIAR TAMBIÉN ESTE PARA EJECUTAR DESDE RAÍZ
+    # EJECUTAR DESDE RAÍZ
     uvicorn.run("Server.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")

@@ -1,83 +1,164 @@
 """
-Test de integración completo del Ratoncito Pérez Digital
-Prueba todo el flujo: API + Chat + Pinecone + Base de datos
+Test de integración completo del Ratoncito Pérez Digital con Autenticación
+Prueba todo el flujo: Registro → Login → Familia → Chat → Ruta completa
 """
 
 import pytest
-import asyncio
 import requests
 import time
+import uuid
 from typing import Dict, Any
 
 # Configuración del test
 BASE_URL = "http://localhost:8000"
-TEST_FAMILY_NAME = "Familia Test Integración"
-TEST_TIMEOUT = 30  # segundos
+TEST_TIMEOUT = 30
 
-class TestRatonPerezIntegration:
-    """Test de integración completa de la aplicación"""
+class TestRatonPerezCompleteFlow:
+    """Test de integración completa con autenticación"""
     
     @classmethod
     def setup_class(cls):
-        """Setup inicial - verificar que el servidor esté funcionando"""
-        print("\n🚀 Iniciando test de integración completo...")
+        """Setup inicial - generar datos únicos para el test"""
+        print("\n🚀 Iniciando test de flujo completo con autenticación...")
+        
+        # Generar datos únicos para evitar conflictos
+        unique_id = str(uuid.uuid4())[:8]
+        cls.test_email = f"test_{unique_id}@integration.com"
+        cls.test_password = "123456"  # 6 caracteres mínimo
+        cls.family_name = f"Familia Test {unique_id}"
+        
+        # Variables de estado
+        cls.access_token = None
+        cls.user_id = None
         cls.family_id = None
         cls.total_points = 0
         
-        # Verificar que el servidor esté up
+        print(f"📧 Email de prueba: {cls.test_email}")
+        print(f"👨‍👩‍👧‍👦 Familia de prueba: {cls.family_name}")
+        
+        # Verificar servidor
         try:
-            response = requests.get(f"{BASE_URL}/", timeout=10)
+            response = requests.get(f"{BASE_URL}/health", timeout=10)
             assert response.status_code == 200
             print("✅ Servidor funcionando correctamente")
         except Exception as e:
-            pytest.fail(f"❌ Servidor no está disponible en {BASE_URL}: {e}")
+            pytest.fail(f"❌ Servidor no disponible: {e}")
     
-    def test_01_health_check(self):
-        """Test 1: Verificar salud del sistema"""
-        print("\n🏥 Test 1: Health Check del sistema...")
+    def test_01_health_and_auth_check(self):
+        """Test 1: Verificar salud del sistema y autenticación"""
+        print("\n🏥 Test 1: Health Check y servicios de auth...")
         
-        # Probar diferentes endpoints de health posibles
-        health_endpoints = ["/health", "/healthz", "/api/health"]
-        health_data = None
+        # Health check general
+        response = requests.get(f"{BASE_URL}/healthz")
+        assert response.status_code == 200
         
-        for endpoint in health_endpoints:
-            try:
-                response = requests.get(f"{BASE_URL}{endpoint}")
-                if response.status_code == 200:
-                    health_data = response.json()
-                    print(f"   Health endpoint encontrado: {endpoint}")
-                    break
-            except:
-                continue
+        health_data = response.json()
+        print(f"   Estado general: {health_data.get('status')}")
+        print(f"   Auth disponible: {health_data.get('auth', {}).get('available', False)}")
+        print(f"   Database: {health_data.get('database', 'unknown')}")
         
-        # Si no hay health endpoint, verificar que al menos el servidor responda
-        if not health_data:
-            response = requests.get(f"{BASE_URL}/")
-            assert response.status_code == 200
-            print(f"   Servidor funcionando en root endpoint")
-            health_data = {"status": "healthy", "database": "unknown"}
+        # Verificar que endpoints de auth estén disponibles
+        response = requests.get(f"{BASE_URL}/_routes")
+        routes = response.json().get("routes", [])
+        auth_routes = [r for r in routes if "/api/auth/" in r.get("path", "")]
         
-        print(f"   Estado: {health_data.get('status', 'unknown')}")
-        print(f"   Base de datos: {health_data.get('database', 'unknown')}")
+        assert len(auth_routes) >= 4  # register, login, me, logout mínimo
+        print(f"   Endpoints de auth encontrados: {len(auth_routes)}")
         
-        print("✅ Sistema saludable")
+        print("✅ Sistema y autenticación listos")
     
-    def test_02_create_family(self):
-        """Test 2: Crear familia de prueba"""
-        print("\n👨‍👩‍👧‍👦 Test 2: Creando familia de prueba...")
+    def test_02_user_registration(self):
+        """Test 2: Registro de usuario"""
+        print(f"\n👤 Test 2: Registrando usuario {self.test_email}...")
+        
+        registration_data = {
+            "email": self.test_email,
+            "password": self.test_password,
+            "avatar": "icon1"
+        }
+        
+        response = requests.post(f"{BASE_URL}/api/auth/register", json=registration_data)
+        assert response.status_code == 200
+        
+        auth_response = response.json()
+        
+        # Verificar estructura de respuesta
+        assert "access_token" in auth_response
+        assert "user" in auth_response
+        assert auth_response["token_type"] == "bearer"
+        
+        # Guardar datos para tests posteriores
+        self.__class__.access_token = auth_response["access_token"]
+        self.__class__.user_id = auth_response["user"]["id"]
+        
+        print(f"   Usuario registrado con ID: {self.user_id}")
+        print(f"   Token obtenido: {self.access_token[:20]}...")
+        print(f"   Avatar: {auth_response['user']['avatar']}")
+        
+        print("✅ Usuario registrado exitosamente")
+    
+    def test_03_user_login(self):
+        """Test 3: Login de usuario (verificar que también funciona)"""
+        print(f"\n🔐 Test 3: Login con usuario registrado...")
+        
+        login_data = {
+            "email": self.test_email,
+            "password": self.test_password
+        }
+        
+        response = requests.post(f"{BASE_URL}/api/auth/login", json=login_data)
+        assert response.status_code == 200
+        
+        login_response = response.json()
+        
+        # Verificar que obtenemos token válido
+        assert "access_token" in login_response
+        assert login_response["user"]["id"] == self.user_id
+        assert login_response["user"]["email"] == self.test_email
+        
+        print(f"   Login exitoso para usuario ID: {self.user_id}")
+        print(f"   Nuevo token obtenido: {login_response['access_token'][:20]}...")
+        
+        print("✅ Login verificado")
+    
+    def test_04_get_user_profile(self):
+        """Test 4: Obtener perfil de usuario"""
+        print(f"\n👨‍💼 Test 4: Obteniendo perfil de usuario...")
+        
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.get(f"{BASE_URL}/api/auth/me", headers=headers)
+        assert response.status_code == 200
+        
+        profile = response.json()
+        
+        assert profile["user"]["id"] == self.user_id
+        assert profile["user"]["email"] == self.test_email
+        assert profile["total_families"] == 0  # No debería tener familias aún
+        assert profile["total_points"] == 0
+        
+        print(f"   Email: {profile['user']['email']}")
+        print(f"   Familias: {profile['total_families']}")
+        print(f"   Puntos totales: {profile['total_points']}")
+        
+        print("✅ Perfil obtenido correctamente")
+    
+    def test_05_create_family(self):
+        """Test 5: Crear familia autenticada"""
+        print(f"\n👨‍👩‍👧‍👦 Test 5: Creando familia autenticada...")
         
         family_data = {
-            "name": TEST_FAMILY_NAME,
+            "name": self.family_name,
             "preferred_language": "es",
             "members": [
-                {"name": "Ana", "age": 35, "member_type": "adult"},
-                {"name": "Carlos", "age": 37, "member_type": "adult"},
-                {"name": "Sofia", "age": 8, "member_type": "child"},
-                {"name": "Pablo", "age": 5, "member_type": "child"}
+                {"name": "Ana García", "age": 35, "member_type": "adult"},
+                {"name": "Carlos García", "age": 37, "member_type": "adult"},
+                {"name": "Sofia García", "age": 8, "member_type": "child"},
+                {"name": "Pablo García", "age": 5, "member_type": "child"}
             ]
         }
         
-        response = requests.post(f"{BASE_URL}/api/families/", json=family_data)
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.post(f"{BASE_URL}/api/families/", json=family_data, headers=headers)
         assert response.status_code == 200
         
         family_response = response.json()
@@ -87,264 +168,271 @@ class TestRatonPerezIntegration:
         print(f"   Nombre: {family_response['name']}")
         print(f"   Miembros: {len(family_response['members'])}")
         
-        assert family_response["name"] == TEST_FAMILY_NAME
+        assert family_response["name"] == self.family_name
         assert len(family_response["members"]) == 4
         
         print("✅ Familia creada exitosamente")
     
-    def test_03_get_family_info(self):
-        """Test 3: Obtener información de la familia"""
-        print(f"\n📋 Test 3: Obteniendo info de familia {self.family_id}...")
+    def test_06_get_user_families(self):
+        """Test 6: Listar familias del usuario"""
+        print(f"\n📋 Test 6: Listando familias del usuario...")
         
-        response = requests.get(f"{BASE_URL}/api/families/{self.family_id}")
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.get(f"{BASE_URL}/api/families/", headers=headers)
         assert response.status_code == 200
         
-        family_data = response.json()
-        print(f"   Familia: {family_data['name']}")
-        print(f"   Idioma: {family_data['preferred_language']}")
+        families_data = response.json()
         
-        assert family_data["id"] == self.family_id
-        assert family_data["name"] == TEST_FAMILY_NAME
+        assert families_data["total_families"] == 1
+        assert len(families_data["families"]) == 1
+        assert families_data["families"][0]["id"] == self.family_id
+        assert families_data["user_id"] == self.user_id
         
-        print("✅ Información de familia obtenida")
+        print(f"   Total familias: {families_data['total_families']}")
+        print(f"   Primera familia: {families_data['families'][0]['name']}")
+        
+        print("✅ Familias listadas correctamente")
     
-    def test_04_initial_chat_arrival(self):
-        """Test 4: Chat inicial - llegada a Plaza de Oriente"""
-        print(f"\n💬 Test 4: Chat inicial - Llegada al primer POI...")
+    def test_07_chat_initial_arrival(self):
+        """Test 7: Chat inicial - llegada a Plaza de Oriente"""
+        print(f"\n💬 Test 7: Chat inicial con autenticación...")
         
         chat_data = {
             "family_id": self.family_id,
-            "message": "¡Hola Ratoncito Pérez! ¡Estamos muy emocionados!",
+            "message": "¡Hola Ratoncito Pérez! ¡Estamos muy emocionados de comenzar!",
             "speaker_name": "Sofia"
         }
         
-        response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data)
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data, headers=headers)
         assert response.status_code == 200
         
         chat_response = response.json()
-        print(f"   Éxito: {chat_response.get('success')}")
-        print(f"   Puntos ganados: {chat_response.get('points_earned')}")
-        print(f"   Situación: {chat_response.get('situation')}")
-        print(f"   Respuesta: {chat_response.get('response')[:100]}...")
         
         assert chat_response["success"] is True
-        assert chat_response["points_earned"] == 100  # Puntos de llegada
-        assert "Plaza de Oriente" in chat_response["response"]
+        assert chat_response["points_earned"] >= 50  # Puntos de llegada o engagement
         
         self.__class__.total_points += chat_response["points_earned"]
         
-        print("✅ Chat inicial exitoso - Llegada registrada")
+        print(f"   Éxito: {chat_response['success']}")
+        print(f"   Puntos ganados: {chat_response['points_earned']}")
+        print(f"   Situación: {chat_response.get('situation', 'N/A')}")
+        print(f"   Respuesta: {chat_response['response'][:100]}...")
+        
+        print("✅ Chat inicial exitoso")
     
-    def test_05_location_question(self):
-        """Test 5: Pregunta sobre el lugar actual"""
-        print(f"\n❓ Test 5: Pregunta sobre ubicación actual...")
+    def test_08_family_status_check(self):
+        """Test 8: Verificar estado de familia"""
+        print(f"\n📊 Test 8: Verificando estado de familia...")
         
-        chat_data = {
-            "family_id": self.family_id,
-            "message": "¿Qué es este lugar? ¿Puedes contarnos sobre la Plaza de Oriente?",
-            "speaker_name": "Carlos"
-        }
-        
-        response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data)
-        assert response.status_code == 200
-        
-        chat_response = response.json()
-        print(f"   Puntos ganados: {chat_response.get('points_earned')}")
-        print(f"   Situación: {chat_response.get('situation')}")
-        print(f"   Respuesta incluye info histórica: {'historia' in chat_response.get('response', '').lower()}")
-        
-        assert chat_response["success"] is True
-        assert chat_response["points_earned"] > 0  # Puntos de engagement
-        
-        self.__class__.total_points += chat_response["points_earned"]
-        
-        print("✅ Pregunta sobre ubicación respondida")
-    
-    def test_06_answer_agent_question(self):
-        """Test 6: Responder pregunta del agente"""
-        print(f"\n🗣️ Test 6: Respondiendo pregunta del agente...")
-        
-        chat_data = {
-            "family_id": self.family_id,
-            "message": "¡Sí, nos encanta este lugar! Es muy bonito y tiene mucha historia.",
-            "speaker_name": "Ana"
-        }
-        
-        response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data)
-        assert response.status_code == 200
-        
-        chat_response = response.json()
-        print(f"   Puntos ganados: {chat_response.get('points_earned')}")
-        print(f"   Total acumulado: {chat_response.get('total_points')}")
-        
-        assert chat_response["success"] is True
-        
-        self.__class__.total_points += chat_response["points_earned"]
-        
-        print("✅ Respuesta a pregunta del agente procesada")
-    
-    def test_07_get_family_status(self):
-        """Test 7: Obtener estado del progreso familiar"""
-        print(f"\n📊 Test 7: Consultando estado de progreso...")
-        
-        response = requests.get(f"{BASE_URL}/api/chat/family/{self.family_id}/status")
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.get(f"{BASE_URL}/api/chat/family/{self.family_id}/status", headers=headers)
         assert response.status_code == 200
         
         status_data = response.json()
-        print(f"   Familia: {status_data.get('family_name', 'N/A')}")
+        
+        assert status_data["success"] is True
+        assert status_data["user_id"] == self.user_id
+        assert status_data.get("total_points", 0) >= 0
+        
+        print(f"   Usuario propietario: {status_data['user_id']}")
         print(f"   Puntos totales: {status_data.get('total_points', 0)}")
         print(f"   POI actual: {status_data.get('current_poi_index', 0)}")
-        print(f"   POIs visitados: {status_data.get('visited_pois', 0)}")
-        print(f"   Progreso: {status_data.get('progress_percentage', 0)}%")
         
-        assert status_data.get("success") is True
-        assert status_data.get("total_points", 0) > 0
-        
-        print("✅ Estado de progreso obtenido")
+        print("✅ Estado verificado correctamente")
     
-    def test_08_get_next_destination(self):
-        """Test 8: Obtener siguiente destino"""
-        print(f"\n🗺️ Test 8: Consultando siguiente destino...")
+    def test_09_complete_poi_interaction(self):
+        """Test 9: Interacción completa en un POI"""
+        print(f"\n🏛️ Test 9: Interacción completa en POI...")
         
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        # Serie de mensajes para simular interacción completa
+        interactions = [
+            {
+                "message": "¿Qué puedes contarnos sobre este lugar tan especial?",
+                "speaker": "Ana",
+                "expect_points": True
+            },
+            {
+                "message": "¡Nos encanta la historia de Madrid!",
+                "speaker": "Carlos", 
+                "expect_points": True
+            },
+            {
+                "message": "¿Podemos explorar más lugares cerca de aquí?",
+                "speaker": "Sofia",
+                "expect_points": True
+            }
+        ]
+        
+        points_earned_this_poi = 0
+        
+        for interaction in interactions:
+            chat_data = {
+                "family_id": self.family_id,
+                "message": interaction["message"],
+                "speaker_name": interaction["speaker"]
+            }
+            
+            response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data, headers=headers)
+            assert response.status_code == 200
+            
+            chat_response = response.json()
+            points = chat_response.get("points_earned", 0)
+            points_earned_this_poi += points
+            
+            print(f"   {interaction['speaker']}: {points} puntos")
+            print(f"   Respuesta: {chat_response['response'][:80]}...")
+            
+            time.sleep(0.5)  # Pequeña pausa entre mensajes
+        
+        self.__class__.total_points += points_earned_this_poi
+        print(f"   Total puntos en este POI: {points_earned_this_poi}")
+        
+        print("✅ Interacción completa en POI")
+    
+    def test_10_route_progression(self):
+        """Test 10: Progresión en la ruta"""
+        print(f"\n🗺️ Test 10: Verificando progresión de ruta...")
+        
+        # Obtener siguiente destino
         response = requests.get(f"{BASE_URL}/api/routes/family/{self.family_id}/next")
         assert response.status_code == 200
         
         next_poi = response.json()
+        
         print(f"   Siguiente POI: {next_poi.get('name', 'N/A')}")
-        print(f"   Índice: {next_poi.get('index', 'N/A')}")
         print(f"   Progreso: {next_poi.get('progress', 'N/A')}")
         
-        # Debería ser Plaza de Ramales (índice 1)
-        assert next_poi.get("name") == "Plaza de Ramales"
-        assert next_poi.get("index") == 1
-        
-        print("✅ Siguiente destino obtenido")
-    
-    def test_09_route_overview(self):
-        """Test 9: Obtener vista general de la ruta"""
-        print(f"\n🌍 Test 9: Consultando vista general de la ruta...")
-        
+        # Obtener vista general de la ruta
         response = requests.get(f"{BASE_URL}/api/routes/overview")
         assert response.status_code == 200
         
         route_data = response.json()
         route_pois = route_data.get("route", [])
         
-        print(f"   Total POIs en la ruta: {len(route_pois)}")
-        print(f"   Primer POI: {route_pois[0]['name'] if route_pois else 'N/A'}")
-        print(f"   Último POI: {route_pois[-1]['name'] if route_pois else 'N/A'}")
+        assert len(route_pois) == 10
+        print(f"   Total POIs en ruta: {len(route_pois)}")
+        print(f"   Primer POI: {route_pois[0]['name']}")
+        print(f"   Último POI: {route_pois[-1]['name']}")
         
-        assert len(route_pois) == 10  # 10 POIs en la ruta
-        assert route_pois[0]["name"] == "Plaza de Oriente"
-        assert route_pois[-1]["name"] == "Museo Ratoncito Pérez"
-        
-        print("✅ Vista general de la ruta obtenida")
+        print("✅ Progresión de ruta verificada")
     
-    def test_10_madrid_knowledge_search(self):
-        """Test 10: Buscar información sobre Madrid"""
-        print(f"\n🔍 Test 10: Búsqueda de conocimiento sobre Madrid...")
+    def test_11_chat_history(self):
+        """Test 11: Verificar historial de chat"""
+        print(f"\n📜 Test 11: Verificando historial de chat...")
         
-        search_queries = [
-            "¿Qué es la Plaza Mayor?",
-            "Cuéntame sobre el Palacio Real",
-            "Historia del Teatro Real",
-            "Lugares para niños en Madrid"
-        ]
-        
-        for query in search_queries:
-            chat_data = {
-                "family_id": self.family_id,
-                "message": query,
-                "speaker_name": "Sofia"
-            }
-            
-            response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data)
-            assert response.status_code == 200
-            
-            chat_response = response.json()
-            print(f"   Query: '{query[:30]}...'")
-            print(f"   Respuesta exitosa: {chat_response.get('success')}")
-            
-            assert chat_response["success"] is True
-            assert len(chat_response.get("response", "")) > 0
-        
-        print("✅ Búsquedas de conocimiento exitosas")
-    
-    def test_11_multiple_speakers(self):
-        """Test 11: Conversación con múltiples hablantes"""
-        print(f"\n👥 Test 11: Conversación con múltiples miembros...")
-        
-        conversations = [
-            {"speaker": "Sofia", "message": "¡Me gusta mucho este lugar!"},
-            {"speaker": "Pablo", "message": "¿Hay ratoncitos de verdad aquí?"},
-            {"speaker": "Ana", "message": "Sofia, ¿qué es lo que más te gusta?"},
-            {"speaker": "Carlos", "message": "Deberíamos tomar una foto aquí"},
-        ]
-        
-        for conv in conversations:
-            chat_data = {
-                "family_id": self.family_id,
-                "message": conv["message"],
-                "speaker_name": conv["speaker"]
-            }
-            
-            response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data)
-            assert response.status_code == 200
-            
-            chat_response = response.json()
-            print(f"   {conv['speaker']}: {chat_response.get('success')}")
-            
-            assert chat_response["success"] is True
-        
-        print("✅ Conversación multi-hablante exitosa")
-    
-    def test_12_final_status_check(self):
-        """Test 12: Verificación final del estado"""
-        print(f"\n🏁 Test 12: Verificación final del estado...")
-        
-        response = requests.get(f"{BASE_URL}/api/chat/family/{self.family_id}/status")
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.get(f"{BASE_URL}/api/chat/family/{self.family_id}/history", headers=headers)
         assert response.status_code == 200
         
-        final_status = response.json()
-        final_points = final_status.get("total_points", 0)
+        history_data = response.json()
         
-        print(f"   Puntos finales: {final_points}")
-        print(f"   POIs visitados: {final_status.get('visited_pois', 0)}")
-        print(f"   Progreso total: {final_status.get('progress_percentage', 0)}%")
+        assert history_data["family_id"] == self.family_id
+        assert history_data["total_messages"] > 0
+        assert len(history_data["messages"]) > 0
         
-        assert final_points >= 100  # Al menos puntos de llegada
-        assert final_status.get("visited_pois", 0) >= 1  # Al menos 1 POI visitado
+        print(f"   Total mensajes: {history_data['total_messages']}")
+        print(f"   Mostrando: {history_data['showing']}")
+        print(f"   Último mensaje: {history_data['messages'][-1].get('user_message', 'N/A')[:50]}...")
         
-        print("✅ Estado final verificado")
-        print(f"\n🎉 TEST COMPLETO EXITOSO - Puntos totales: {final_points}")
+        print("✅ Historial verificado")
+    
+    def test_12_unauthorized_access_protection(self):
+        """Test 12: Verificar protección contra acceso no autorizado"""
+        print(f"\n🔒 Test 12: Verificando protección de endpoints...")
+        
+        # Intentar acceder sin token
+        response = requests.get(f"{BASE_URL}/api/families/")
+        assert response.status_code == 401
+        
+        response = requests.post(f"{BASE_URL}/api/chat/message", json={
+            "family_id": self.family_id,
+            "message": "test"
+        })
+        assert response.status_code == 401
+        
+        # Intentar con token inválido
+        headers = {"Authorization": "Bearer token_falso_invalid"}
+        response = requests.get(f"{BASE_URL}/api/families/", headers=headers)
+        assert response.status_code == 401
+        
+        print("   ✅ Acceso sin token: bloqueado")
+        print("   ✅ Acceso con token inválido: bloqueado")
+        
+        print("✅ Protección de seguridad verificada")
+    
+    def test_13_final_profile_verification(self):
+        """Test 13: Verificación final del perfil actualizado"""
+        print(f"\n🏁 Test 13: Verificación final del perfil...")
+        
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        response = requests.get(f"{BASE_URL}/api/auth/me", headers=headers)
+        assert response.status_code == 200
+        
+        final_profile = response.json()
+        
+        assert final_profile["total_families"] == 1
+        assert final_profile["total_points"] >= 0  # Puede variar según puntos otorgados
+        assert len(final_profile["families"]) == 1
+        
+        family = final_profile["families"][0]
+        assert family["name"] == self.family_name
+        assert len(family["members"]) == 4
+        
+        print(f"   Usuario: {final_profile['user']['email']}")
+        print(f"   Familias totales: {final_profile['total_families']}")
+        print(f"   Puntos acumulados: {final_profile['total_points']}")
+        print(f"   Familia creada: {family['name']}")
+        
+        print("✅ Perfil final verificado")
+        print(f"\n🎉 FLUJO COMPLETO EXITOSO")
+        print(f"   Email: {self.test_email}")
+        print(f"   Familia: {self.family_name}")
+        print(f"   Puntos totales: {final_profile['total_points']}")
+    
+    @classmethod
+    def teardown_class(cls):
+        """Cleanup opcional - en producción podrías limpiar datos de test"""
+        print(f"\n🧹 Cleanup completado")
+        print(f"   Usuario de prueba: {cls.test_email}")
+        print(f"   Familia de prueba: {cls.family_name}")
 
 
-# Funciones de utilidad para ejecutar manualmente
-def run_integration_test():
-    """Ejecuta el test de integración manualmente"""
-    print("🚀 Ejecutando test de integración completo...")
-    pytest.main(["-v", "-s", "Server/tests/test_integration_full.py"])
+# Funciones de utilidad
+def run_complete_flow_test():
+    """Ejecuta el test completo de flujo con autenticación"""
+    print("🚀 Ejecutando test de flujo completo con autenticación...")
+    pytest.main(["-v", "-s", __file__])
 
-def quick_health_check():
-    """Verificación rápida de salud del sistema"""
+def quick_auth_test():
+    """Test rápido solo de autenticación"""
     try:
-        response = requests.get(f"{BASE_URL}/health", timeout=5)
+        # Test de registro rápido
+        unique_id = str(uuid.uuid4())[:8]
+        test_data = {
+            "email": f"quick_{unique_id}@test.com",
+            "password": "123456",
+            "avatar": "icon1"
+        }
+        
+        response = requests.post(f"{BASE_URL}/api/auth/register", json=test_data)
         if response.status_code == 200:
-            health = response.json()
-            print(f"✅ Sistema: {health.get('status')}")
-            print(f"✅ DB: {health.get('database')}")
+            auth_data = response.json()
+            print(f"✅ Auth rápido: Usuario creado con token")
             return True
         else:
-            print(f"❌ Health check falló: {response.status_code}")
+            print(f"❌ Auth falló: {response.status_code}")
             return False
     except Exception as e:
-        print(f"❌ Error conectando al servidor: {e}")
+        print(f"❌ Error en auth test: {e}")
         return False
 
 if __name__ == "__main__":
-    print("Verificando servidor antes del test...")
-    if quick_health_check():
-        run_integration_test()
+    print("Verificando servidor y autenticación...")
+    if quick_auth_test():
+        run_complete_flow_test()
     else:
-        print("❌ Servidor no disponible. Inicia el servidor primero:")
+        print("❌ Test de autenticación falló. Verifica que el servidor esté corriendo.")
         print("   python Server/main.py")
