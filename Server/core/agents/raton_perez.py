@@ -30,7 +30,7 @@ from Server.core.agents.madrid_knowledge import (
 )
 from Server.core.agents.location_helper import RATON_PEREZ_ROUTE
 
-# NUEVO: Importar servicios optimizados
+# Importar servicios optimizados
 from Server.core.services.embedding_service import embedding_service
 from Server.core.services.pinecone_service import pinecone_service
 
@@ -69,11 +69,6 @@ class RatonPerez:
 
             # Evaluar puntos según la situación detectada
             points_result = evaluate_points(family_context, message, situation)
-
-            # Fallback para engagement básico
-            if situation["type"] in ["location_question", "poi_question"] and points_result.get("points_earned", 0) == 0:
-                points_result["points_earned"] = 5
-                points_result.setdefault("achievements", []).append("Engagement con el lugar")
 
             # Generar respuesta del agente usando búsquedas vectoriales optimizadas
             response = await self._generate_contextual_response(
