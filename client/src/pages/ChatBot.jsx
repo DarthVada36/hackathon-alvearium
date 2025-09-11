@@ -31,7 +31,22 @@ const ChatBot = () => {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState('');
   const [isAdvancing, setIsAdvancing] = useState(false);
+  const [isGeneratingGreeting, setIsGeneratingGreeting] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Lista de POIs para referencia
+  const POIS_LIST = [
+    { id: "plaza_oriente", name: "Plaza de Oriente", index: 0 },
+    { id: "plaza_ramales", name: "Plaza de Ramales", index: 1 },
+    { id: "calle_vergara", name: "Calle de Vergara", index: 2 },
+    { id: "plaza_isabel_ii", name: "Plaza de Isabel II", index: 3 },
+    { id: "calle_arenal_1", name: "Calle del Arenal (Teatro)", index: 4 },
+    { id: "calle_bordadores", name: "Calle de Bordadores", index: 5 },
+    { id: "plazuela_san_gines", name: "Plazuela de San Ginés", index: 6 },
+    { id: "pasadizo_san_gines", name: "Pasadizo de San Ginés", index: 7 },
+    { id: "calle_arenal_2", name: "Calle del Arenal (Sol)", index: 8 },
+    { id: "museo_raton_perez", name: "Museo Ratoncito Pérez", index: 9 }
+  ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -72,6 +87,104 @@ const ChatBot = () => {
     }
   };
 
+  const generateWelcomeMessage = async (family, status) => {
+    try {
+      setIsGeneratingGreeting(true);
+      
+      // Determinar POI actual basado en el estado de la familia
+      const currentPoiIndex = status?.current_poi_index || 0;
+      const currentPoi = POIS_LIST[currentPoiIndex] || POIS_LIST[0];
+      
+      // Determinar el tipo de saludo basado en el progreso
+      let greetingType = 'inicial';
+      if (status?.visited_pois > 0) {
+        greetingType = 'regreso';
+      }
+      
+      // Crear mensaje de contexto para el saludo
+      const greetingContext = {
+        family_name: family.name,
+        current_poi: currentPoi,
+        progress: {
+          current_index: currentPoiIndex,
+          total_pois: POIS_LIST.length,
+          points: status?.total_points || 0,
+          visited_count: status?.visited_pois || 0
+        },
+        greeting_type: greetingType
+      };
+      
+      // Mensaje específico según el contexto
+      let contextMessage = '';
+      if (greetingType === 'inicial') {
+        contextMessage = `¡Hola ${family.name}! Soy el Ratoncito Pérez y estoy muy emocionado de acompañaros en esta aventura por Madrid. Comenzamos nuestra ruta en ${currentPoi.name}, un lugar muy especial que me encanta. ¿Estáis listos para descubrir los secretos mágicos de Madrid conmigo?`;
+      } else {
+        contextMessage = `¡Bienvenidos de vuelta, ${family.name}! Me alegra veros otra vez. Veo que ya habéis visitado ${status.visited_pois} lugares en nuestra ruta y habéis conseguido ${status.total_points} puntos mágicos. Ahora estamos en ${currentPoi.name}. ¿Qué aventura os apetece vivir hoy?`;
+      }
+      
+      // Enviar mensaje al backend para generar respuesta contextual
+      const response = await ApiService.sendChatMessage(
+        family.id,
+        contextMessage,
+        null,
+        'Sistema'
+      );
+      
+      if (response.success) {
+        // Crear mensaje del sistema primero (contexto)
+        const systemMessage = {
+          id: `welcome_system_${Date.now()}`,
+          text: contextMessage,
+          sender: 'system',
+          timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+          isHidden: true // Para que no se muestre visualmente
+        };
+        
+        // Crear respuesta del Ratoncito Pérez
+        const welcomeMessage = {
+          id: `welcome_${Date.now()}`,
+          text: response.response,
+          sender: 'bot',
+          timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+          points_earned: response.points_earned,
+          situation: response.situation,
+          achievements: response.achievements,
+          isWelcome: true,
+          currentPoi: currentPoi
+        };
+        
+        // Agregar ambos mensajes (el sistema oculto y la respuesta visible)
+        setMessages([systemMessage, welcomeMessage]);
+        
+        // Actualizar estado si hay cambios de puntos
+        if (response.points_earned > 0) {
+          await loadFamilyStatus();
+        }
+      } else {
+        throw new Error(response.error || 'Error generando saludo');
+      }
+    } catch (error) {
+      console.error('Error generating welcome message:', error);
+      
+      // Mensaje de bienvenida fallback
+      const currentPoiIndex = status?.current_poi_index || 0;
+      const currentPoi = POIS_LIST[currentPoiIndex] || POIS_LIST[0];
+      
+      const fallbackMessage = {
+        id: `welcome_fallback_${Date.now()}`,
+        text: `¡Hola ${family.name}! 🐭✨ Soy el Ratoncito Pérez y estoy aquí para acompañaros en vuestra aventura por Madrid. Actualmente nos encontramos en ${currentPoi.name}. ¡Preguntadme lo que queráis saber sobre este lugar mágico!`,
+        sender: 'bot',
+        timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
+        isWelcome: true,
+        currentPoi: currentPoi
+      };
+      
+      setMessages([fallbackMessage]);
+    } finally {
+      setIsGeneratingGreeting(false);
+    }
+  };
+
   const loadChatHistory = async () => {
     if (!selectedFamily) return;
     
@@ -98,15 +211,11 @@ const ChatBot = () => {
 
       setMessages(formattedMessages);
 
-      // Si no hay historial, mostrar mensaje de bienvenida
+      // Si no hay historial, generar mensaje de bienvenida contextual
       if (formattedMessages.length === 0) {
-        const welcomeMessage = {
-          id: 'welcome',
-          text: `¡Hola ${selectedFamily.name}! Soy el Ratoncito Pérez, vuestro guía personal por Madrid. ¿En qué puedo ayudaros hoy?`,
-          sender: 'bot',
-          timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages([welcomeMessage]);
+        // Esperar a que se cargue el estado de la familia antes de generar el saludo
+        const status = await ApiService.getFamilyStatus(selectedFamily.id);
+        await generateWelcomeMessage(selectedFamily, status);
       }
     } catch (error) {
       console.error('Error loading chat history:', error);
@@ -137,7 +246,7 @@ const ChatBot = () => {
       timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages(prev => [...prev.filter(msg => !msg.isHidden), userMessage]); // Filtrar mensajes ocultos
     const messageToSend = newMessage;
     setNewMessage('');
     setIsSending(true);
@@ -164,7 +273,7 @@ const ChatBot = () => {
           achievements: response.achievements
         };
 
-        setMessages(prev => [...prev, botResponse]);
+        setMessages(prev => [...prev.filter(msg => !msg.isHidden), botResponse]); // Filtrar mensajes ocultos
 
         // Actualizar estado de la familia si hay cambios
         if (response.points_earned > 0) {
@@ -185,7 +294,7 @@ const ChatBot = () => {
         timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
         isError: true
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev.filter(msg => !msg.isHidden), errorMessage]); // Filtrar mensajes ocultos
     } finally {
       setIsSending(false);
       setIsTyping(false);
@@ -217,7 +326,7 @@ const ChatBot = () => {
           }
         };
 
-        setMessages(prev => [...prev, advanceMessage]);
+        setMessages(prev => [...prev.filter(msg => !msg.isHidden), advanceMessage]); // Filtrar mensajes ocultos
 
         // Actualizar estado de familia
         await loadFamilyStatus();
@@ -231,7 +340,7 @@ const ChatBot = () => {
             timestamp: new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }),
             isCompletion: true
           };
-          setMessages(prev => [...prev, completionMessage]);
+          setMessages(prev => [...prev.filter(msg => !msg.isHidden), completionMessage]); // Filtrar mensajes ocultos
         }
       } else {
         throw new Error(response.message || 'Error avanzando al siguiente POI');
@@ -404,12 +513,17 @@ const ChatBot = () => {
           <div className="h-[calc(100vh-340px)] flex flex-col">
             {/* Chat Messages */}
             <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-              {isLoadingHistory ? (
+              {isLoadingHistory || isGeneratingGreeting ? (
                 <div className="flex justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600"></div>
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto mb-2"></div>
+                    <p className="text-amber-600 text-sm">
+                      {isGeneratingGreeting ? 'El Ratoncito Pérez os está preparando un saludo...' : 'Cargando conversación...'}
+                    </p>
+                  </div>
                 </div>
               ) : (
-                messages.map((message) => (
+                messages.filter(msg => !msg.isHidden).map((message) => (
                   <div
                     key={message.id}
                     className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -423,12 +537,19 @@ const ChatBot = () => {
                         ? 'bg-green-50 border border-green-200 text-green-700'
                         : message.isCompletion
                         ? 'bg-purple-50 border border-purple-200 text-purple-700'
+                        : message.isWelcome
+                        ? 'bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-gray-800'
                         : 'bg-white border border-lime-200'
                     } rounded-2xl p-4 shadow-sm`}>
                       {message.sender === 'bot' && !message.isError && (
                         <div className="flex items-center space-x-2 mb-2">
                           <FiTarget className="text-amber-600" size={16} />
-                          <span className="text-xs font-medium text-amber-600">Ratoncito Pérez</span>
+                          <span className="text-xs font-medium text-amber-600">
+                            Ratoncito Pérez
+                            {message.isWelcome && message.currentPoi && (
+                              <span className="ml-2 text-blue-600">📍 {message.currentPoi.name}</span>
+                            )}
+                          </span>
                         </div>
                       )}
                       
@@ -503,7 +624,7 @@ const ChatBot = () => {
             </div>
 
             {/* Quick Questions */}
-            {messages.length <= 1 && !isLoadingHistory && (
+            {messages.filter(msg => !msg.isHidden).length <= 2 && !isLoadingHistory && !isGeneratingGreeting && (
               <div className="mb-4">
                 <p className="text-sm text-gray-600 mb-3 flex items-center">
                   <FiHelpCircle className="mr-2" />
@@ -534,12 +655,12 @@ const ChatBot = () => {
                     placeholder="Pregunta sobre Madrid, su historia, lugares que visitar..."
                     className="w-full resize-none border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-500 text-sm max-h-20"
                     rows="1"
-                    disabled={isSending}
+                    disabled={isSending || isGeneratingGreeting}
                   />
                 </div>
                 <button
                   onClick={handleSendMessage}
-                  disabled={!newMessage.trim() || isSending}
+                  disabled={!newMessage.trim() || isSending || isGeneratingGreeting}
                   className="bg-amber-600 text-white p-3 rounded-xl hover:bg-amber-600/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSending ? (

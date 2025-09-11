@@ -1,6 +1,7 @@
 """
 Ratoncito Pérez - Orquestador Principal
 Integrado con búsquedas vectoriales y conocimiento dinámico de Madrid
+Usa servicios de embeddings y Pinecone
 """
 
 from typing import Dict, Any, Optional
@@ -25,27 +26,37 @@ from Server.core.agents.points_system import (
 from Server.core.agents.madrid_knowledge import (
     get_location_info,
     search_madrid_content,
-    ensure_knowledge_initialized,
     get_location_summary
 )
 from Server.core.agents.location_helper import RATON_PEREZ_ROUTE
 
+# NUEVO: Importar servicios optimizados
+from Server.core.services.embedding_service import embedding_service
+from Server.core.services.pinecone_service import pinecone_service
+
 class RatonPerez:
-    """Orquestador principal del Ratoncito Pérez con búsquedas vectoriales"""
+    """Orquestador principal del Ratoncito Pérez con búsquedas vectoriales optimizadas"""
     
     def __init__(self, db):
         self.settings = langchain_settings
         self.db = db
         
-        # Inicializar base de conocimiento
-        logger.info("🧠 Inicializando base de conocimiento...")
-        knowledge_ready = ensure_knowledge_initialized()
-        if knowledge_ready:
-            logger.info("✅ Base de conocimiento lista")
-        else:
-            logger.warning("⚠️ Base de conocimiento en modo fallback")
+        # Verificar disponibilidad de servicios optimizados
+        self._embedding_available = embedding_service and embedding_service.is_available()
+        self._pinecone_available = pinecone_service and pinecone_service.is_available()
         
-        logger.info("✅ Ratoncito Pérez inicializado")
+        if self._embedding_available:
+            logger.info("✅ Servicio de embeddings optimizado disponible")
+        else:
+            logger.warning("⚠️ Servicio de embeddings no disponible - modo degradado")
+            
+        if self._pinecone_available:
+            logger.info("✅ Servicio de Pinecone optimizado disponible")
+        else:
+            logger.warning("⚠️ Servicio de Pinecone no disponible - modo degradado")
+        
+        # NO inicializar base de conocimiento aquí - se hace en background en main.py
+        logger.info("✅ Ratoncito Pérez inicializado (modo optimizado)")
 
     async def chat(self, family_id: int, message: str,
                    location: Optional[Dict[str, float]] = None,
@@ -64,7 +75,7 @@ class RatonPerez:
                 points_result["points_earned"] = 5
                 points_result.setdefault("achievements", []).append("Engagement con el lugar")
 
-            # Generar respuesta del agente usando búsquedas vectoriales
+            # Generar respuesta del agente usando búsquedas vectoriales optimizadas
             response = await self._generate_contextual_response(
                 family_context, message, situation, points_result
             )
@@ -95,8 +106,8 @@ class RatonPerez:
     async def _analyze_situation(self, message: str, location: Optional[Dict], context: FamilyContext) -> Dict[str, Any]:
         """
         Detecta tipo de situación y determina si es una pregunta sobre lugares
+        OPTIMIZADO: Análisis más eficiente
         """
-        # ✅ CORREGIDO: Usar current_poi_index en lugar de visited_pois
         # Primera vez → llegada al primer POI (si está en índice 0 y no hay historial)
         if context.current_poi_index == 0 and len(context.conversation_history) == 0:
             return {
@@ -143,22 +154,24 @@ class RatonPerez:
     def _generate_poi_question(self, poi_id: str) -> str:
         """
         Genera una pregunta sobre el POI usando información dinámica
+        OPTIMIZADO: Usa servicios optimizados cuando están disponibles
         """
         try:
-            # Obtener información del POI usando búsquedas vectoriales
-            poi_info = get_location_info(poi_id, "basic_info")
+            # Intentar obtener información del POI usando servicios optimizados
+            if self._embedding_available and self._pinecone_available:
+                poi_info = get_location_info(poi_id, "basic_info")
+                
+                # Extraer un dato interesante para hacer pregunta
+                if poi_info and len(poi_info) > 50:
+                    # Tomar la primera oración como base para la pregunta
+                    first_sentence = poi_info.split('.')[0]
+                    if len(first_sentence) > 20:
+                        return f"Por cierto, {first_sentence.lower()}. ¿Qué os parece más interesante de este lugar?"
             
-            # Extraer un dato interesante para hacer pregunta
-            if poi_info and len(poi_info) > 50:
-                # Tomar la primera oración como base para la pregunta
-                first_sentence = poi_info.split('.')[0]
-                if len(first_sentence) > 20:
-                    return f"Por cierto, {first_sentence.lower()}. ¿Qué os parece más interesante de este lugar?"
-            
-            # Preguntas genéricas por POI
+            # Preguntas genéricas por POI como fallback
             poi_questions = {
                 "plaza_oriente": "¿Sabíais que esta plaza tiene una historia muy especial con el Palacio Real?",
-                "museo_raton_perez": "¿Os emocionais de estar en mi casa oficial? ¿Qué os gustaría saber?",
+                "museo_raton_perez": "¿Os emocionáis de estar en mi casa oficial? ¿Qué os gustaría saber?",
                 "plaza_mayor": "¿Habéis visto alguna vez una plaza tan perfectamente rectangular?",
                 "palacio_real": "¿Creéis que los reyes también perdían dientes de pequeños?",
             }
@@ -166,7 +179,7 @@ class RatonPerez:
             return poi_questions.get(poi_id, "¿Qué os parece este lugar mágico?")
             
         except Exception as e:
-            logger.error(f"Error generando pregunta para {poi_id}: {e}")
+            logger.error(f"❌ Error generando pregunta para {poi_id}: {e}")
             return "¿Qué os parece este lugar tan especial?"
 
     async def _generate_contextual_response(self, context: FamilyContext, message: str,
@@ -183,7 +196,7 @@ class RatonPerez:
             if c:
                 celebration = f"\n\nCELEBRACIÓN DE PUNTOS:\n{c}"
 
-        # Preparar contexto específico según situación
+        # Preparar contexto específico según situación (optimizado)
         situation_context = await self._build_situation_context(situation, message, context)
 
         # Prompt completo
@@ -214,6 +227,7 @@ Usa la información proporcionada para dar respuestas educativas y entretenidas.
     async def _build_situation_context(self, situation: Dict[str, Any], message: str, context: FamilyContext) -> str:
         """
         Construye el contexto específico según la situación detectada
+        OPTIMIZADO: Usa servicios optimizados para obtener información
         """
         situation_type = situation["type"]
         
@@ -223,8 +237,17 @@ Usa la información proporcionada para dar respuestas educativas y entretenidas.
             poi_id = poi["poi_id"]
             poi_name = poi["poi_name"]
             
-            # Obtener información dinámica del POI
-            poi_info = get_location_info(poi_id, "basic_info")
+            # Obtener información dinámica del POI 
+            poi_info = ""
+            if self._embedding_available and self._pinecone_available:
+                try:
+                    poi_info = get_location_info(poi_id, "basic_info")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error obteniendo info de {poi_id}, usando fallback: {e}")
+                    poi_info = f"Información sobre {poi_name} - un lugar especial en Madrid."
+            else:
+                poi_info = f"Información sobre {poi_name} - un lugar especial en Madrid."
+            
             question = self._generate_poi_question(poi_id)
             
             return f"""LLEGADA A: {poi_name}
@@ -240,13 +263,25 @@ PREGUNTA PARA LA FAMILIA:
             query = situation["data"]["query"]
             current_poi_id = situation.get("current_poi_id")
             
-            # Buscar información relevante usando búsquedas vectoriales
-            search_results = search_madrid_content(query)
+            # Buscar información relevante usando búsquedas vectoriales optimizadas
+            search_results = ""
+            if self._embedding_available and self._pinecone_available:
+                try:
+                    search_results = search_madrid_content(query)
+                except Exception as e:
+                    logger.warning(f"⚠️ Error en búsqueda vectorial, usando fallback: {e}")
+                    search_results = "Información general sobre Madrid disponible."
+            else:
+                search_results = "Madrid es una ciudad llena de historia y lugares fascinantes."
             
             # Información específica del POI actual si es relevante
             current_poi_info = ""
-            if current_poi_id:
-                current_poi_info = f"\nINFORMACIÓN DEL LUGAR ACTUAL:\n{get_location_info(current_poi_id, 'basic_info')}"
+            if current_poi_id and self._embedding_available and self._pinecone_available:
+                try:
+                    poi_data = get_location_info(current_poi_id, 'basic_info')
+                    current_poi_info = f"\nINFORMACIÓN DEL LUGAR ACTUAL:\n{poi_data}"
+                except Exception as e:
+                    logger.warning(f"⚠️ Error obteniendo info del POI actual: {e}")
             
             # Generar pregunta de seguimiento
             follow_up_question = self._generate_poi_question(current_poi_id) if current_poi_id else ""
@@ -263,9 +298,10 @@ PREGUNTA DE SEGUIMIENTO:
         elif situation_type == "general_conversation":
             # Conversación general
             current_poi_id = situation.get("current_poi_id")
-            if current_poi_id:
-                poi_summary = get_location_summary(current_poi_id)
-                return f"""CONVERSACIÓN GENERAL
+            if current_poi_id and self._embedding_available and self._pinecone_available:
+                try:
+                    poi_summary = get_location_summary(current_poi_id)
+                    return f"""CONVERSACIÓN GENERAL
 
 CONTEXTO DEL LUGAR ACTUAL:
 Estamos en: {poi_summary.get('name', 'un lugar especial')}
@@ -273,8 +309,15 @@ Estamos en: {poi_summary.get('name', 'un lugar especial')}
 
 PREGUNTA PARA MANTENER EL INTERÉS:
 {self._generate_poi_question(current_poi_id)}"""
-            else:
-                return "CONVERSACIÓN GENERAL\n\nEl Ratoncito Pérez está listo para una aventura por Madrid."
+                except Exception as e:
+                    logger.warning(f"⚠️ Error obteniendo resumen del POI: {e}")
+                    
+            return """CONVERSACIÓN GENERAL
+
+El Ratoncito Pérez está aquí para ayudar con cualquier pregunta sobre Madrid.
+
+PREGUNTA PARA MANTENER EL INTERÉS:
+¿Hay algo especial de Madrid que os gustaría conocer?"""
 
         else:
             return "El Ratoncito Pérez está aquí para ayudar con cualquier pregunta sobre Madrid."
@@ -294,13 +337,17 @@ PREGUNTA PARA MANTENER EL INTERÉS:
         
         family_context_str = "\n".join(family_info) if family_info else "Una familia aventurera"
         
-        # ✅ PROMPT MENOS VERBOSO
+        # Información sobre disponibilidad de servicios (para debugging)
+        service_status = ""
+        if not self._embedding_available or not self._pinecone_available:
+            service_status = "\n[MODO DEGRADADO: Servicios de IA limitados]"
+        
         return f"""Eres el Ratoncito Pérez, guía mágico y educativo de Madrid.
 
 FAMILIA QUE VISITAS:
 {family_context_str}
 Puntos mágicos acumulados: {context.total_points}
-POIs visitados: {len(context.visited_pois)}/10
+POIs visitados: {len(context.visited_pois)}/10{service_status}
 
 PERSONALIDAD:
 - Mágico pero conciso
@@ -388,11 +435,19 @@ async def get_next_destination(family_id: int, db) -> Dict[str, Any]:
         
         if next_index < len(RATON_PEREZ_ROUTE):
             next_poi = RATON_PEREZ_ROUTE[next_index]
-            # Enriquecer con información dinámica
-            poi_info = get_location_summary(next_poi["id"])
+            
+            # Enriquecer con información dinámica si los servicios están disponibles
+            dynamic_info = {}
+            if raton_perez._embedding_available and raton_perez._pinecone_available:
+                try:
+                    dynamic_info = get_location_summary(next_poi["id"])
+                except Exception as e:
+                    logger.warning(f"⚠️ Error obteniendo info dinámica para {next_poi['id']}: {e}")
+                    dynamic_info = {"basic_info": "Información no disponible temporalmente"}
+            
             return {
                 **next_poi,
-                "dynamic_info": poi_info,
+                "dynamic_info": dynamic_info,
                 "progress": f"{next_index + 1}/{len(RATON_PEREZ_ROUTE)}"
             }
         else:

@@ -1,6 +1,7 @@
 """
 Madrid Knowledge - Sistema de conocimiento sobre Madrid
 Integrado con Pinecone para búsquedas vectoriales y Wikipedia para contenido dinámico
+Usa EmbeddingService para evitar recarga del modelo en cada request
 """
 
 from typing import Dict, Any, List, Optional
@@ -8,26 +9,25 @@ import logging
 import requests
 import os
 
-# ============================
 # Configuración
-# ============================
-USE_PINECONE = True  # ✅ Cambiado a True
+USE_PINECONE = True
 WIKIPEDIA_API_URL = "https://es.wikipedia.org/api/rest_v1/page/summary/"
 
 logger = logging.getLogger(__name__)
 
-# Importar servicios
+# Importar servicios optimizados
 try:
     from Server.core.services.pinecone_service import pinecone_service
-    logger.info("✅ Pinecone service importado correctamente")
+    from Server.core.services.embedding_service import embedding_service
+    logger.info("✅ Servicios de Pinecone y Embeddings importados correctamente")
 except ImportError as e:
-    logger.error(f"❌ Error importando pinecone_service: {e}")
+    logger.error(f"❌ Error importando servicios: {e}")
     pinecone_service = None
+    embedding_service = None
     USE_PINECONE = False
 
-# ============================
+
 # POIs de la ruta (solo IDs y nombres)
-# ============================
 RATON_PEREZ_POIS = [
     {"id": "plaza_oriente", "name": "Plaza de Oriente"},
     {"id": "plaza_ramales", "name": "Plaza de Ramales"},
@@ -52,58 +52,8 @@ CLASSIC_MADRID_POIS = [
 
 ALL_POIS = RATON_PEREZ_POIS + CLASSIC_MADRID_POIS
 
-# ============================
-# Funciones de embedding
-# ============================
-def _get_embeddings(texts: List[str]) -> List[List[float]]:
-    """
-    Genera embeddings usando sentence-transformers
-    """
-    try:
-        from sentence_transformers import SentenceTransformer
-        
-        # Usar el modelo configurado en el .env o uno por defecto
-        model_name = os.getenv("PINECONE_EMBEDDING_MODEL", "intfloat/e5-large-v2")
-        if model_name == "llama-text-embed-v2":
-            # Si es el modelo de Llama, usar uno compatible con sentence-transformers
-            model_name = "intfloat/e5-large-v2"
-        
-        model = SentenceTransformer(model_name)
-        
-        # Preparar textos con prefijo para e5
-        prepared_texts = [f"passage: {text}" for text in texts]
-        embeddings = model.encode(prepared_texts, normalize_embeddings=True)
-        
-        return embeddings.tolist()
-    except Exception as e:
-        logger.error(f"❌ Error generando embeddings: {e}")
-        return []
 
-def _get_query_embedding(query: str) -> List[float]:
-    """
-    Genera embedding para una consulta
-    """
-    try:
-        from sentence_transformers import SentenceTransformer
-        
-        model_name = os.getenv("PINECONE_EMBEDDING_MODEL", "intfloat/e5-large-v2")
-        if model_name == "llama-text-embed-v2":
-            model_name = "intfloat/e5-large-v2"
-        
-        model = SentenceTransformer(model_name)
-        
-        # Prefijo para consultas
-        prepared_query = f"query: {query}"
-        embedding = model.encode([prepared_query], normalize_embeddings=True)
-        
-        return embedding[0].tolist()
-    except Exception as e:
-        logger.error(f"❌ Error generando embedding de consulta: {e}")
-        return []
-
-# ============================
 # Funciones de Wikipedia
-# ============================
 def fetch_wikipedia_content(poi_name: str) -> Dict[str, str]:
     """
     Obtiene contenido de Wikipedia para un POI
@@ -130,24 +80,38 @@ def fetch_wikipedia_content(poi_name: str) -> Dict[str, str]:
         logger.error(f"❌ Error obteniendo datos de Wikipedia para {poi_name}: {e}")
         return {"basic_info": f"Información sobre {poi_name} no disponible temporalmente."}
 
-# ============================
+
 # Funciones principales
-# ============================
 def initialize_madrid_knowledge():
     """
     Inicializa la base de conocimiento obteniendo datos de Wikipedia y subiéndolos a Pinecone
+    OPTIMIZADO: Verifica qué POIs ya tienen embeddings para evitar reprocesamiento
     """
     if not USE_PINECONE or not pinecone_service or not pinecone_service.is_available():
         logger.warning("⚠️ Pinecone no disponible, usando modo offline")
         return False
     
+    if not embedding_service or not embedding_service.is_available():
+        logger.warning("⚠️ Servicio de embeddings no disponible")
+        return False
+    
     logger.info("🚀 Inicializando base de conocimiento de Madrid...")
+    
+    # Verificar qué POIs ya existen en Pinecone
+    existing_vectors = _get_existing_vectors()
     
     success_count = 0
     
     for poi in ALL_POIS:
         poi_id = poi["id"]
         poi_name = poi["name"]
+        vector_id = f"{poi_id}_basic_info"
+        
+        # Saltar si ya existe
+        if vector_id in existing_vectors:
+            logger.info(f"⏭️ {poi_name} ya existe en Pinecone, saltando...")
+            success_count += 1
+            continue
         
         logger.info(f"📍 Procesando {poi_name}...")
         
@@ -155,16 +119,16 @@ def initialize_madrid_knowledge():
         wiki_content = fetch_wikipedia_content(poi_name)
         
         if wiki_content.get("basic_info"):
-            # Generar embedding
-            embeddings = _get_embeddings([wiki_content["basic_info"]])
+            # Generar embedding usando el servicio optimizado
+            embedding = embedding_service.generate_single_embedding(wiki_content["basic_info"], "passage")
             
-            if embeddings:
+            if embedding:
                 # Subir a Pinecone
                 success = pinecone_service.upsert_madrid_content(
                     poi_id=poi_id,
                     content_type="basic_info",
                     text=wiki_content["basic_info"],
-                    embedding=embeddings[0]
+                    embedding=embedding
                 )
                 
                 if success:
@@ -180,14 +144,28 @@ def initialize_madrid_knowledge():
     logger.info(f"🎯 Inicialización completada: {success_count}/{len(ALL_POIS)} POIs procesados")
     return success_count > 0
 
+def _get_existing_vectors() -> set:
+    """
+    Obtiene los IDs de vectores que ya existen en Pinecone para evitar reprocesamiento
+    """
+    try:
+        stats = pinecone_service.get_index_stats()
+        # Por ahora retornamos set vacío, pero se podría implementar una consulta más específica
+        # para obtener los IDs existentes si Pinecone lo permite
+        return set()
+    except Exception as e:
+        logger.error(f"❌ Error verificando vectores existentes: {e}")
+        return set()
+
 def get_location_info(poi_id: str, info_type: str = "basic_info") -> str:
     """
     Obtiene información sobre una ubicación específica
+    Usa embeddings pre-calculados cuando es posible
     """
-    if USE_PINECONE and pinecone_service and pinecone_service.is_available():
+    if USE_PINECONE and pinecone_service and pinecone_service.is_available() and embedding_service:
         # Buscar en Pinecone por POI específico
         dummy_query = f"información sobre {poi_id}"
-        query_embedding = _get_query_embedding(dummy_query)
+        query_embedding = embedding_service.generate_query_embedding(dummy_query)
         
         if query_embedding:
             results = pinecone_service.search_madrid_content(
@@ -211,10 +189,11 @@ def get_location_info(poi_id: str, info_type: str = "basic_info") -> str:
 def search_madrid_content(query: str) -> str:
     """
     Busca contenido en toda la base de conocimiento usando búsqueda semántica
+    Usa el servicio de embeddings optimizado
     """
-    if USE_PINECONE and pinecone_service and pinecone_service.is_available():
-        # Búsqueda semántica en Pinecone
-        query_embedding = _get_query_embedding(query)
+    if USE_PINECONE and pinecone_service and pinecone_service.is_available() and embedding_service:
+        # Búsqueda semántica en Pinecone usando servicio optimizado
+        query_embedding = embedding_service.generate_query_embedding(query)
         
         if query_embedding:
             results = pinecone_service.search_madrid_content(
@@ -271,9 +250,8 @@ def _search_by_keywords(query: str) -> str:
     return ("Madrid es la capital de España con un rico patrimonio histórico. "
             "¿Te interesa algún lugar específico como la Plaza Mayor, el Palacio Real o la Puerta del Sol?")
 
-# ============================
+
 # Funciones auxiliares
-# ============================
 def _get_poi_name_by_id(poi_id: str) -> Optional[str]:
     """
     Obtiene el nombre de un POI por su ID
@@ -321,12 +299,12 @@ def get_location_summary(poi_id: str) -> Dict[str, str]:
         "magical_story": get_poi_stories(poi_id),
     }
 
-# ============================
-# Inicialización automática
-# ============================
+
+# Inicialización optimizada
 def ensure_knowledge_initialized():
     """
     Asegura que la base de conocimiento esté inicializada para los 10 POIs de la ruta
+    No ejecuta inicialización en cada request
     """
     if not USE_PINECONE:
         logger.info("📚 Modo offline: usando respuestas predefinidas")
@@ -336,20 +314,22 @@ def ensure_knowledge_initialized():
         logger.warning("⚠️ Pinecone no disponible")
         return False
     
-    # Verificar si ya hay datos en Pinecone
+    if not embedding_service or not embedding_service.is_available():
+        logger.warning("⚠️ Servicio de embeddings no disponible")
+        return False
+    
+    # Verificación rápida: solo verificar si hay vectores en el índice
     try:
         stats = pinecone_service.get_index_stats()
         vector_count = stats.get("total_vector_count", 0)
         
-        if vector_count == 0:
-            logger.info("📊 Pinecone vacío, inicializando 10 POIs de la ruta...")
-            return initialize_madrid_knowledge()
-        elif vector_count < 10:
-            logger.info(f"📊 Pinecone tiene {vector_count} vectores, completando hasta 10...")
-            return initialize_madrid_knowledge()
-        else:
-            logger.info(f"📊 Pinecone ya tiene {vector_count} vectores (≥10 POIs)")
+        if vector_count >= 10:
+            logger.info(f"📊 Base de conocimiento ya inicializada ({vector_count} vectores)")
             return True
+        else:
+            logger.info(f"📊 Base de conocimiento parcial ({vector_count} vectores), se completará en background")
+            return True  # No bloquear el request, se completará después
+            
     except Exception as e:
         logger.error(f"❌ Error verificando estado de Pinecone: {e}")
         return False
