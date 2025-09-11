@@ -166,6 +166,7 @@ class FamilyContext:
         return True
 
     def get_current_poi_id(self) -> Optional[str]:
+        # ✅ CORREGIDO: Verificar que el índice esté en rango
         if 0 <= self.current_poi_index < len(RATON_PEREZ_ROUTE):
             return RATON_PEREZ_ROUTE[self.current_poi_index]["id"]
         return None
@@ -193,8 +194,11 @@ class FamilyContext:
                 parts.append(f"Niños: {', '.join(child_details)}")
         if self.total_points > 0:
             parts.append(f"Puntos mágicos: {self.total_points}")
-        if self.visited_pois:
-            parts.append(f"POIs visitados: {len(self.visited_pois)}/10")
+        
+        # ✅ CORREGIDO: Usar current_poi_index + 1 para mostrar POIs visitados correctamente
+        pois_visited_count = min(self.current_poi_index + 1, len(RATON_PEREZ_ROUTE))
+        parts.append(f"POIs visitados: {pois_visited_count}/{len(RATON_PEREZ_ROUTE)}")
+        
         if self.current_speaker:
             parts.append(f"Último en hablar: {self.current_speaker}")
         return "\n".join(parts)
@@ -239,7 +243,6 @@ async def load_family_context(family_id: int, db) -> FamilyContext:
 async def save_family_context(context: FamilyContext, db):
     context_data = context.to_dict()
     await _save_to_database(context.family_id, context_data, db)
-
 
 async def _load_from_database(family_id: int, db) -> Optional[Dict[str, Any]]:
     try:

@@ -96,8 +96,9 @@ class RatonPerez:
         """
         Detecta tipo de situación y determina si es una pregunta sobre lugares
         """
-        # Primera vez → llegada al primer POI
-        if not context.visited_pois:
+        # ✅ CORREGIDO: Usar current_poi_index en lugar de visited_pois
+        # Primera vez → llegada al primer POI (si está en índice 0 y no hay historial)
+        if context.current_poi_index == 0 and len(context.conversation_history) == 0:
             return {
                 "type": "poi_arrival",
                 "data": {"poi_id": "plaza_oriente", "poi_name": "Plaza de Oriente", "poi_index": 0},
@@ -293,6 +294,7 @@ PREGUNTA PARA MANTENER EL INTERÉS:
         
         family_context_str = "\n".join(family_info) if family_info else "Una familia aventurera"
         
+        # ✅ PROMPT MENOS VERBOSO
         return f"""Eres el Ratoncito Pérez, guía mágico y educativo de Madrid.
 
 FAMILIA QUE VISITAS:
@@ -301,16 +303,15 @@ Puntos mágicos acumulados: {context.total_points}
 POIs visitados: {len(context.visited_pois)}/10
 
 PERSONALIDAD:
-- Mágico y entrañable, pero educativo
-- Adaptas el lenguaje a las edades de los niños
-- Mezclas información real con toques de fantasía
-- Siempre positivo y motivador
-- Haces preguntas para mantener el engagement
+- Mágico pero conciso
+- Respuestas de 1-2 oraciones máximo
+- Directo al grano pero amigable
+- Una pregunta ocasional, no siempre
 
 OBJETIVOS:
-- Enseñar sobre Madrid de forma divertida
-- Mantener a la familia comprometida
-- Otorgar puntos por participación
+- Información útil y breve
+- Mantener la magia sin rollo
+- Puntos claros sobre Madrid
 - Crear momentos memorables"""
 
     async def _update_context(self, context: FamilyContext, user_message: str, agent_response: str,

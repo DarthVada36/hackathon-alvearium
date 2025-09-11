@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Navigation from '../components/Navigation';
+import ApiService from '../services/ApiService';
 import { 
   FiUser, 
   FiStar, 
@@ -11,7 +12,9 @@ import {
   FiMail,
   FiCalendar,
   FiTrendingUp,
-  FiCheck
+  FiCheck,
+  FiRefreshCw,
+  FiAlertCircle
 } from 'react-icons/fi';
 
 // Import avatar images
@@ -32,6 +35,12 @@ const Profile = () => {
     avatar: user?.avatar || 'icon1'
   });
 
+  // ============ ESTADOS DINÁMICOS ============
+  const [families, setFamilies] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
   // Available avatars
   const avatars = [
     { id: 'icon1', src: icon1, name: 'Ratoncito Clásico' },
@@ -42,19 +51,175 @@ const Profile = () => {
     { id: 'icon6', src: icon6, name: 'Ratoncito Maestro' }
   ];
 
+  // ============ FUNCIONES DE CARGA ============
+  
+  const loadUserData = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      // Cargar perfil del usuario
+      const profile = await ApiService.getCurrentUser();
+      setUserProfile(profile);
+      
+      // Cargar familias del usuario
+      const familiesResponse = await ApiService.getFamilies();
+      setFamilies(familiesResponse.families || []);
+      
+      // DEBUG: Ver qué datos llegan exactamente
+      console.log('🔍 Familias del backend:', familiesResponse.families);
+      if (familiesResponse.families?.[0]) {
+        console.log('🔍 Primera familia:', familiesResponse.families[0]);
+        console.log('🔍 Campos disponibles:', Object.keys(familiesResponse.families[0]));
+        
+        // Verificar si current_poi_index existe
+        console.log('🔍 current_poi_index:', familiesResponse.families[0].current_poi_index);
+        console.log('🔍 points_earned:', familiesResponse.families[0].points_earned);
+      }
+      
+      // DEBUG: También cargar estado de familia para comparar
+      if (familiesResponse.families?.[0]) {
+        try {
+          const firstFamilyStatus = await ApiService.getFamilyStatus(familiesResponse.families[0].id);
+          console.log('🔍 Estado de primera familia:', firstFamilyStatus);
+          console.log('🔍 current_poi_index en estado:', firstFamilyStatus.current_poi_index);
+          console.log('🔍 progress_percentage:', firstFamilyStatus.progress_percentage);
+        } catch (error) {
+          console.error('❌ Error obteniendo estado de familia:', error);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      setError('Error cargando datos del perfil');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const refreshData = async () => {
+    await loadUserData();
+  };
+
+  // ============ EFFECTS ============
+  
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      setEditForm({
+        name: user.name || '',
+        email: user.email || '',
+        avatar: user.avatar || 'icon1'
+      });
+    }
+  }, [user]);
+
+  // ============ DATOS DINÁMICOS CALCULADOS ============
+  
+  // Calcular estadísticas reales desde las familias
+  const totalPoints = userProfile?.total_points || families.reduce((sum, family) => sum + (family.points_earned || 0), 0) || 0;
+  const totalPlaces = families.reduce((sum, family) => sum + (family.visited_pois || 0), 0) || 0;
+  const totalFamilies = families.length || 0;
+
+  const stats = [
+    {
+      label: "Puntos Totales",
+      value: totalPoints,
+      icon: <FiStar className="text-amber-600" />,
+      color: "text-amber-600"
+    },
+    {
+      label: "Lugares Visitados",
+      value: totalPlaces,
+      icon: <FiMapPin className="text-blue-500" />,
+      color: "text-blue-500"
+    },
+    {
+      label: "Familias",
+      value: totalFamilies,
+      icon: <FiAward className="text-green-500" />,
+      color: "text-green-500"
+    }
+  ];
+
+  // Logros dinámicos basados en datos reales
+  const achievements = [
+    { 
+      name: "Primera Visita", 
+      icon: "🦷", 
+      unlocked: totalPlaces > 0, 
+      description: "Visitaste tu primer lugar",
+      date: families[0]?.created_at ? new Date(families[0].created_at).toLocaleDateString('es-ES') : null
+    },
+    { 
+      name: "Explorador", 
+      icon: "💰", 
+      unlocked: totalPlaces >= 3, 
+      description: "Visitaste 3 lugares diferentes",
+      date: totalPlaces >= 3 ? new Date().toLocaleDateString('es-ES') : null
+    },
+    { 
+      name: "Coleccionista", 
+      icon: "👑", 
+      unlocked: totalPoints >= 100, 
+      description: "Conseguiste 100 puntos",
+      date: totalPoints >= 100 ? new Date().toLocaleDateString('es-ES') : null
+    },
+    { 
+      name: "Madrileño Experto", 
+      icon: "🏛️", 
+      unlocked: totalPlaces >= 10, 
+      description: "Completa toda la ruta",
+      date: totalPlaces >= 10 ? new Date().toLocaleDateString('es-ES') : null
+    }
+  ];
+
+  // Lugares visitados dinámicos (simplificado basado en familias)
+  const visitedPlaces = families.flatMap((family, familyIndex) => {
+    const currentIndex = family.current_poi_index || 0;
+    // Si está en índice N, ha visitado N+1 lugares
+    const placesVisited = currentIndex + 1;
+    const pointsPerPlace = Math.floor((family.points_earned || 0) / Math.max(placesVisited, 1));
+    
+    // Generar lugares genéricos basados en el progreso
+    const places = [];
+    for (let i = 0; i < Math.min(placesVisited, 3); i++) {
+      places.push({
+        name: `Lugar ${i + 1} - ${family.name}`,
+        points: pointsPerPlace || 25,
+        date: new Date(family.created_at).toLocaleDateString('es-ES')
+      });
+    }
+    return places;
+  }).slice(0, 5); // Mostrar máximo 5
+
   const getCurrentAvatar = () => {
     const currentAvatar = avatars.find(avatar => avatar.id === (user?.avatar || 'icon1'));
     return currentAvatar ? currentAvatar.src : icon1;
   };
 
-  const handleSave = () => {
-    updateUserProfile({
-      name: editForm.name,
-      email: editForm.email,
-      avatar: editForm.avatar
-    });
-    setIsEditing(false);
-    setShowAvatarSelection(false);
+  const handleSave = async () => {
+    try {
+      setError('');
+      
+      // Actualizar perfil en el contexto de autenticación
+      updateUserProfile({
+        name: editForm.name,
+        email: editForm.email,
+        avatar: editForm.avatar
+      });
+      
+      // Aquí podrías agregar una llamada al backend si hay endpoint para actualizar perfil
+      // await ApiService.updateProfile(editForm);
+      
+      setIsEditing(false);
+      setShowAvatarSelection(false);
+    } catch (error) {
+      setError('Error actualizando perfil');
+    }
   };
 
   const handleCancel = () => {
@@ -72,42 +237,8 @@ const Profile = () => {
     setShowAvatarSelection(false);
   };
 
-  const stats = [
-    {
-      label: "Puntos Totales",
-      value: user?.points || 0,
-      icon: <FiStar className="text-amber-600" />,
-      color: "text-amber-600"
-    },
-    {
-      label: "Lugares Visitados",
-      value: user?.visitedPlaces?.length || 0,
-      icon: <FiMapPin className="text-blue-500" />,
-      color: "text-blue-500"
-    },
-    {
-      label: "Insignias",
-      value: user?.badges?.length || 0,
-      icon: <FiAward className="text-green-500" />,
-      color: "text-green-500"
-    }
-  ];
-
-  const achievements = [
-    { name: "Primera Visita", description: "Visitaste tu primer lugar", unlocked: true, date: "15 Nov 2024" },
-    { name: "Explorador", description: "Visitaste 3 lugares diferentes", unlocked: true, date: "16 Nov 2024" },
-    { name: "Madrileño", description: "Completaste 5 lugares emblemáticos", unlocked: false, date: null },
-    { name: "Maestro", description: "Completaste toda la ruta oficial", unlocked: false, date: null }
-  ];
-
-  const visitedPlaces = [
-    { name: "Casa del Ratoncito Pérez", points: 50, date: "16 Nov 2024" },
-    { name: "Puerta del Sol", points: 25, date: "16 Nov 2024" },
-    { name: "Plaza Mayor", points: 30, date: "15 Nov 2024" }
-  ];
-
   const getLevelProgress = () => {
-    const points = user?.points || 0;
+    const points = totalPoints;
     if (points < 51) return { current: "Principiante", next: "Explorador", progress: (points / 51) * 100 };
     if (points < 151) return { current: "Explorador", next: "Aventurero", progress: ((points - 50) / 101) * 100 };
     if (points < 301) return { current: "Aventurero", next: "Maestro Explorador", progress: ((points - 150) / 151) * 100 };
@@ -116,21 +247,56 @@ const Profile = () => {
 
   const levelInfo = getLevelProgress();
 
+  // ============ LOADING STATE ============
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 via-yellow-50 to-amber-50 pb-20">
+        <Header title="Mi Perfil" showBackButton />
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto mb-4"></div>
+            <p className="text-amber-600 font-medium">Cargando perfil...</p>
+          </div>
+        </div>
+        <Navigation />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 via-yellow-50 to-amber-50 pb-20">
       <Header 
         title="Mi Perfil" 
         showBackButton
       >
-        <button
-          onClick={() => setIsEditing(!isEditing)}
-          className="p-2 rounded-lg hover:bg-amber-200 transition-colors"
-        >
-          <FiEdit3 size={20} className="text-amber-600" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={refreshData}
+            className="p-2 rounded-lg hover:bg-amber-200 transition-colors"
+          >
+            <FiRefreshCw size={16} className="text-amber-600" />
+          </button>
+          <button
+            onClick={() => setIsEditing(!isEditing)}
+            className="p-2 rounded-lg hover:bg-amber-200 transition-colors"
+          >
+            <FiEdit3 size={20} className="text-amber-600" />
+          </button>
+        </div>
       </Header>
       
       <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="flex items-center">
+              <FiAlertCircle className="mr-2" size={16} />
+              <span className="text-sm">{error}</span>
+            </div>
+          </div>
+        )}
+
         {/* Información Personal */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-amber-100">
           <div className="flex items-center space-x-4 mb-6">
@@ -179,14 +345,14 @@ const Profile = () => {
                 </div>
               ) : (
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800">{user?.name}</h2>
+                  <h2 className="text-xl font-bold text-gray-800">{user?.email?.split('@')[0] || 'Usuario'}</h2>
                   <div className="flex items-center space-x-2 text-gray-600 mt-1">
                     <FiMail size={16} />
                     <span>{user?.email}</span>
                   </div>
                   <div className="flex items-center space-x-2 text-gray-600 mt-1">
                     <FiCalendar size={16} />
-                    <span>Miembro desde Nov 2024</span>
+                    <span>Miembro desde {userProfile?.user?.created_at ? new Date(userProfile.user.created_at).toLocaleDateString('es-ES') : 'Recientemente'}</span>
                   </div>
                 </div>
               )}
@@ -242,7 +408,7 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Estadísticas */}
+        {/* Estadísticas - AHORA DINÁMICAS */}
         <div>
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
             <FiTrendingUp className="mr-2 text-amber-600" />
@@ -265,7 +431,7 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Logros */}
+        {/* Logros - AHORA DINÁMICOS */}
         <div>
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
             <FiAward className="mr-2 text-amber-600" />
@@ -289,7 +455,7 @@ const Profile = () => {
                       <p className="text-sm text-gray-600">{achievement.description}</p>
                     </div>
                   </div>
-                  {achievement.unlocked && (
+                  {achievement.unlocked && achievement.date && (
                     <div className="text-right">
                       <div className="text-xs text-gray-500">{achievement.date}</div>
                     </div>
@@ -300,29 +466,68 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Lugares Visitados */}
-        <div>
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-            <FiMapPin className="mr-2 text-amber-600" />
-            Lugares Visitados
-          </h3>
-          <div className="space-y-3">
-            {visitedPlaces.map((place, index) => (
-              <div key={index} className="bg-white rounded-2xl p-4 shadow-sm border border-amber-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium text-gray-800">{place.name}</h4>
-                    <p className="text-sm text-gray-600">{place.date}</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <FiStar className="text-amber-600" size={16} />
-                    <span className="font-bold text-amber-600">+{place.points}</span>
+        {/* Familias Creadas */}
+        {families.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+              <FiUser className="mr-2 text-amber-600" />
+              Mis Familias
+            </h3>
+            <div className="space-y-3">
+              {families.map((family, index) => (
+                <div key={index} className="bg-white rounded-2xl p-4 shadow-sm border border-amber-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-gray-800">{family.name}</h4>
+                      <p className="text-sm text-gray-600">
+                        {family.member_count || 0} miembros • Creada el {new Date(family.created_at).toLocaleDateString('es-ES')}
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <FiStar className="text-amber-600" size={16} />
+                      <span className="font-bold text-amber-600">{family.points_earned || 0}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Lugares Visitados - SIMPLIFICADO PERO DINÁMICO */}
+        {visitedPlaces.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+              <FiMapPin className="mr-2 text-amber-600" />
+              Actividad Reciente
+            </h3>
+            <div className="space-y-3">
+              {visitedPlaces.map((place, index) => (
+                <div key={index} className="bg-white rounded-2xl p-4 shadow-sm border border-amber-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium text-gray-800">{place.name}</h4>
+                      <p className="text-sm text-gray-600">{place.date}</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <FiStar className="text-amber-600" size={16} />
+                      <span className="font-bold text-amber-600">+{place.points}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No hay familias */}
+        {families.length === 0 && (
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-amber-100">
+            <div className="text-4xl mb-4">🐭</div>
+            <h3 className="text-lg font-bold text-gray-800 mb-2">Crea tu primera familia</h3>
+            <p className="text-gray-600">Para comenzar tu aventura con el Ratoncito Pérez, necesitas crear una familia.</p>
+          </div>
+        )}
       </div>
 
       <Navigation />

@@ -50,14 +50,71 @@ async def advance_to_next_poi(
         
         context = await load_family_context(family_id, db)
         current_index = context.current_poi_index
+        
+        logger.info(f"🔍 Avanzando familia {family_id}: current_index={current_index}, total_pois={len(RATON_PEREZ_ROUTE)}")
+        
+        # ✅ VERIFICACIÓN MEJORADA: Manejar el último POI correctamente
+        if current_index >= len(RATON_PEREZ_ROUTE):
+            logger.info(f"✅ Familia {family_id} ya completó la ruta (index={current_index})")
+            return {
+                "success": True,
+                "completed": True,
+                "message": "¡Felicidades! ¡Ya habéis completado toda la ruta del Ratoncito Pérez!",
+                "total_pois": len(RATON_PEREZ_ROUTE),
+                "final_points": context.total_points,
+                "progress": f"{len(RATON_PEREZ_ROUTE)}/{len(RATON_PEREZ_ROUTE)}"
+            }
+        
+        # ✅ CASO ESPECIAL: Estamos en el último POI (index 9)
+        if current_index == len(RATON_PEREZ_ROUTE) - 1:
+            logger.info(f"🏁 Familia {family_id} está en el último POI, marcando como completado")
+            
+            # Marcar el último POI como visitado si no lo está ya
+            last_poi = RATON_PEREZ_ROUTE[current_index]
+            
+            # Verificar si ya se otorgaron puntos de llegada para el último POI
+            if not context.has_earned_poi_points(last_poi["id"], "arrival"):
+                context.add_visited_poi({
+                    "poi_id": last_poi["id"],
+                    "poi_name": last_poi["name"],
+                    "poi_index": current_index,
+                    "points": 100
+                }, mark_arrival=True)
+                
+                context.total_points += 100
+                logger.info(f"💰 Otorgados 100 puntos finales para {last_poi['name']}")
+            
+            # Marcar como completado avanzando el índice más allá del último POI
+            context.current_poi_index = len(RATON_PEREZ_ROUTE)
+            
+            # Guardar contexto actualizado
+            await save_family_context(context, db)
+            
+            return {
+                "success": True,
+                "completed": True,
+                "message": "🎉 ¡Felicidades! ¡Habéis completado toda la ruta del Ratoncito Pérez! Ha sido una aventura increíble.",
+                "poi": {
+                    "id": last_poi["id"],
+                    "name": last_poi["name"],
+                    "description": last_poi.get("description", ""),
+                    "index": current_index
+                },
+                "total_pois": len(RATON_PEREZ_ROUTE),
+                "final_points": context.total_points,
+                "progress": f"{len(RATON_PEREZ_ROUTE)}/{len(RATON_PEREZ_ROUTE)}"
+            }
+        
+        # ✅ CASO NORMAL: Avanzar al siguiente POI
         next_index = current_index + 1
         
-        # Verificar que no hemos completado la ruta
+        # Verificar que el siguiente POI existe
         if next_index >= len(RATON_PEREZ_ROUTE):
+            logger.error(f"❌ next_index {next_index} fuera de rango para familia {family_id}")
             return {
                 "success": False,
                 "completed": True,
-                "message": "¡Felicidades! ¡Habéis completado toda la ruta del Ratoncito Pérez!",
+                "message": "Error: índice fuera de rango",
                 "total_pois": len(RATON_PEREZ_ROUTE),
                 "final_points": context.total_points
             }
@@ -104,8 +161,9 @@ async def advance_to_next_poi(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error avanzando POI para familia {family_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Error avanzando POI para familia {family_id}: {e}")
+        logger.error(f"❌ Detalles del error: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 @router.get("/overview")
 async def route_overview():
