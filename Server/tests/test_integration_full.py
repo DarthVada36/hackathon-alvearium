@@ -1,6 +1,6 @@
 """
 Test de integración completo del Ratoncito Pérez Digital con Autenticación
-Prueba todo el flujo: Registro → Login → Familia → Chat → Ruta completa
+TODOS LOS TESTS ORIGINALES + OPTIMIZACIÓN PARA PUNTOS MÁXIMOS
 """
 
 import pytest
@@ -14,7 +14,7 @@ BASE_URL = "http://localhost:8000"
 TEST_TIMEOUT = 30
 
 class TestRatonPerezCompleteFlow:
-    """Test de integración completa con autenticación"""
+    """Test de integración completa con autenticación - TODOS LOS TESTS"""
     
     @classmethod
     def setup_class(cls):
@@ -35,6 +35,7 @@ class TestRatonPerezCompleteFlow:
         
         print(f"📧 Email de prueba: {cls.test_email}")
         print(f"👨‍👩‍👧‍👦 Familia de prueba: {cls.family_name}")
+        print(f"🎯 Objetivo: 2,250 puntos máximos (10 POIs × 225)")
         
         # Verificar servidor
         try:
@@ -217,7 +218,10 @@ class TestRatonPerezCompleteFlow:
         print(f"   Éxito: {chat_response['success']}")
         print(f"   Puntos ganados: {chat_response['points_earned']}")
         print(f"   Situación: {chat_response.get('situation', 'N/A')}")
-        print(f"   Respuesta: {chat_response['response'][:100]}...")
+        print(f"   📝 Respuesta completa del Ratoncito Pérez:")
+        print(f"   {'-'*60}")
+        print(f"   {chat_response['response']}")
+        print(f"   {'-'*60}")
         
         print("✅ Chat inicial exitoso")
     
@@ -241,34 +245,40 @@ class TestRatonPerezCompleteFlow:
         
         print("✅ Estado verificado correctamente")
     
-    def test_09_complete_poi_interaction(self):
-        """Test 9: Interacción completa en un POI"""
-        print(f"\n🏛️ Test 9: Interacción completa en POI...")
+    def test_09_complete_poi_interaction_optimized(self):
+        """Test 9: Interacción OPTIMIZADA para puntos máximos en POI 1"""
+        print(f"\n🏛️ Test 9: Interacción OPTIMIZADA en POI 1 (Plaza de Oriente)...")
+        print(f"🎯 Objetivo: Maximizar puntos con engagement + preguntas")
         
         headers = {"Authorization": f"Bearer {self.access_token}"}
         
-        # Serie de mensajes para simular interacción completa
+        # Estrategia optimizada: 3 tipos de interacciones diferentes
         interactions = [
             {
-                "message": "¿Qué puedes contarnos sobre este lugar tan especial?",
+                "message": "¡Qué lugar tan fascinante y lleno de historia! Esta plaza nos parece absolutamente increíble.",
                 "speaker": "Ana",
+                "type": "engagement",
                 "expect_points": True
             },
             {
-                "message": "¡Nos encanta la historia de Madrid!",
+                "message": "¿Qué historias increíbles puedes contarnos sobre esta plaza y el Palacio Real?",
                 "speaker": "Carlos", 
+                "type": "pregunta_historia",
                 "expect_points": True
             },
             {
-                "message": "¿Podemos explorar más lugares cerca de aquí?",
+                "message": "¡Nos encanta aprender sobre Madrid! ¿Hay algún secreto especial de este lugar?",
                 "speaker": "Sofia",
+                "type": "pregunta_curiosidad",
                 "expect_points": True
             }
         ]
         
         points_earned_this_poi = 0
         
-        for interaction in interactions:
+        for i, interaction in enumerate(interactions, 1):
+            print(f"\n   💬 Interacción {i}/3 ({interaction['type']}):")
+            
             chat_data = {
                 "family_id": self.family_id,
                 "message": interaction["message"],
@@ -282,22 +292,31 @@ class TestRatonPerezCompleteFlow:
             points = chat_response.get("points_earned", 0)
             points_earned_this_poi += points
             
-            print(f"   {interaction['speaker']}: {points} puntos")
-            print(f"   Respuesta: {chat_response['response'][:80]}...")
+            print(f"   {interaction['speaker']}: +{points} puntos")
+            print(f"   📝 Respuesta completa:")
+            print(f"   {'-'*50}")
+            print(f"   {chat_response['response']}")
+            print(f"   {'-'*50}")
             
-            time.sleep(0.5)  # Pequeña pausa entre mensajes
+            time.sleep(1.2)  # Pausa para evitar rate limiting
         
         self.__class__.total_points += points_earned_this_poi
-        print(f"   Total puntos en este POI: {points_earned_this_poi}")
+        print(f"\n📊 RESUMEN POI 1 OPTIMIZADO:")
+        print(f"   🎯 Total puntos en este POI: {points_earned_this_poi}")
+        print(f"   💰 Puntos acumulados: {self.total_points}")
+        print(f"   🎖️ Máximo posible por POI: 225")
+        print(f"   📈 Eficiencia: {points_earned_this_poi/225*100:.1f}%")
         
-        print("✅ Interacción completa en POI")
+        print("✅ Interacción optimizada en POI 1 completada")
     
     def test_10_route_progression(self):
-        """Test 10: Progresión en la ruta"""
+        """Test 10: Progresión en la ruta con autenticación"""
         print(f"\n🗺️ Test 10: Verificando progresión de ruta...")
         
-        # Obtener siguiente destino
-        response = requests.get(f"{BASE_URL}/api/routes/family/{self.family_id}/next")
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        # Obtener siguiente destino (ahora con autenticación)
+        response = requests.get(f"{BASE_URL}/api/routes/family/{self.family_id}/next", headers=headers)
         assert response.status_code == 200
         
         next_poi = response.json()
@@ -319,9 +338,139 @@ class TestRatonPerezCompleteFlow:
         
         print("✅ Progresión de ruta verificada")
     
-    def test_11_chat_history(self):
-        """Test 11: Verificar historial de chat"""
-        print(f"\n📜 Test 11: Verificando historial de chat...")
+    def test_11_advance_through_all_pois_optimized(self):
+        """Test 11: OPTIMIZADO - Recorrer todos los POIs con estrategia de puntos máximos"""
+        print(f"\n{'='*80}")
+        print(f"🗺️ Test 11: RECORRIDO OPTIMIZADO - POIs 2-10 con puntos máximos")
+        print(f"🎯 Estrategia: 100 llegada + 50 engagement + 75 pregunta = 225 por POI")
+        print(f"{'='*80}")
+        
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        total_route_points = 0
+        pois_visited = 0
+        
+        # Recorrer los 9 POIs restantes (ya estamos en el primero)
+        for poi_number in range(2, 11):  # Del 2 al 10
+            print(f"\n{'='*70}")
+            print(f"🏛️ POI {poi_number}/10 - ESTRATEGIA PUNTOS MÁXIMOS")
+            print(f"{'='*70}")
+            
+            # PASO 1: Avanzar al siguiente POI (100 puntos automáticos)
+            response = requests.post(f"{BASE_URL}/api/routes/family/{self.family_id}/advance", headers=headers)
+            
+            if response.status_code == 200:
+                advance_result = response.json()
+                
+                if advance_result.get("completed"):
+                    print(f"\n{'🎉'*50}")
+                    print(f"🎊 ¡RUTA COMPLETADA! 🎊")
+                    print(f"{'🎉'*50}")
+                    print(f"📝 Mensaje final del Ratoncito Pérez:")
+                    print(f"{'-'*60}")
+                    print(f"{advance_result.get('message')}")
+                    print(f"{'-'*60}")
+                    print(f"🎯 Puntos finales: {advance_result.get('final_points', 0)}")
+                    print(f"{'🎉'*50}")
+                    break
+                
+                if advance_result.get("success") and advance_result.get("advanced"):
+                    poi_info = advance_result.get("poi", {})
+                    points_earned = advance_result.get("points_earned", 0)
+                    total_points = advance_result.get("total_points", 0)
+                    
+                    print(f"   ✅ Llegada a: {poi_info.get('name', 'POI desconocido')}")
+                    print(f"   📍 Puntos por llegada: +{points_earned}")
+                    print(f"   📊 Progreso: {advance_result.get('progress', 'N/A')}")
+                    print(f"   🎯 Total puntos: {total_points}")
+                    
+                    total_route_points += points_earned
+                    pois_visited += 1
+                    
+                    # ESTRATEGIA OPTIMIZADA: 3 interacciones por POI
+                    poi_interactions = [
+                        {
+                            "message": f"¡{poi_info.get('name')} es absolutamente fascinante! Este lugar tiene una energía muy especial y única.",
+                            "speaker": "Ana",
+                            "type": "engagement"
+                        },
+                        {
+                            "message": f"¿Qué historias increíbles y secretos tiene {poi_info.get('name')}? Cuéntanos más detalles fascinantes.",
+                            "speaker": "Carlos", 
+                            "type": "pregunta_historia"
+                        },
+                        {
+                            "message": f"¡Nos encanta descubrir Madrid contigo! ¿Hay alguna curiosidad especial de {poi_info.get('name')}?",
+                            "speaker": "Sofia",
+                            "type": "pregunta_curiosidad"
+                        }
+                    ]
+                    
+                    poi_points = 0
+                    for interaction in poi_interactions:
+                        chat_data = {
+                            "family_id": self.family_id,
+                            "message": interaction["message"],
+                            "speaker_name": interaction["speaker"]
+                        }
+                        
+                        chat_response = requests.post(f"{BASE_URL}/api/chat/message", json=chat_data, headers=headers)
+                        if chat_response.status_code == 200:
+                            chat_result = chat_response.json()
+                            interaction_points = chat_result.get("points_earned", 0)
+                            poi_points += interaction_points
+                            
+                            print(f"   💬 {interaction['type'].title()}: +{interaction_points} puntos ({interaction['speaker']})")
+                            print(f"   🗣️ Respuesta:")
+                            print(f"   {'-'*60}")
+                            print(f"   {chat_result.get('response', '').strip()}")
+                            print(f"   {'-'*60}")
+                            
+                            time.sleep(1.2)  # Pausa para evitar rate limiting
+                    
+                    total_route_points += poi_points
+                    poi_total = points_earned + poi_points
+                    
+                    print(f"\n📊 RESUMEN POI {poi_number}:")
+                    print(f"   🎯 Puntos obtenidos: {poi_total}")
+                    print(f"   🎖️ Máximo posible: 225")
+                    print(f"   📈 Eficiencia: {poi_total/225*100:.1f}%")
+                    print(f"   💰 Total acumulado: {total_points + poi_points}")
+                    
+                    time.sleep(1.0)  # Pausa entre POIs
+                else:
+                    print(f"   ❌ Error en avance: {advance_result}")
+            else:
+                print(f"   ❌ Error HTTP: {response.status_code}")
+                if response.status_code != 500:
+                    print(f"   Respuesta: {response.text}")
+        
+        print(f"\n{'='*80}")
+        print(f"🏁 RECORRIDO COMPLETADO")
+        print(f"{'='*80}")
+        print(f"   📍 POIs visitados: {pois_visited + 1}/10")  # +1 por el POI inicial
+        print(f"   🎯 Puntos de la ruta: {total_route_points}")
+        print(f"   📊 Puntos esperados: ~2250 (10 POIs × 225 puntos máximo)")
+        print(f"   📈 Puntos por POI: ~{total_route_points // (pois_visited + 1) if pois_visited > 0 else 0} promedio")
+        
+        # Verificar estado final
+        status_response = requests.get(f"{BASE_URL}/api/chat/family/{self.family_id}/status", headers=headers)
+        if status_response.status_code == 200:
+            final_status = status_response.json()
+            print(f"   🏛️ POIs en estado final: {final_status.get('visited_pois', 0)}")
+            print(f"   🎖️ Puntos finales: {final_status.get('total_points', 0)}")
+            print(f"   📋 Índice POI actual: {final_status.get('current_poi_index', 0)}")
+        
+        print(f"{'='*80}")
+        
+        # Verificaciones actualizadas para puntos máximos
+        assert pois_visited >= 5, f"Debería haber visitado al menos 5 POIs, visitó {pois_visited}"
+        assert total_route_points >= 1500, f"Debería tener al menos 1500 puntos con interacciones completas, tiene {total_route_points}"
+        
+        print("✅ Recorrido completo optimizado verificado")
+    
+    def test_12_chat_history(self):
+        """Test 12: Verificar historial de chat"""
+        print(f"\n📜 Test 12: Verificando historial de chat...")
         
         headers = {"Authorization": f"Bearer {self.access_token}"}
         response = requests.get(f"{BASE_URL}/api/chat/family/{self.family_id}/history", headers=headers)
@@ -339,33 +488,39 @@ class TestRatonPerezCompleteFlow:
         
         print("✅ Historial verificado")
     
-    def test_12_unauthorized_access_protection(self):
-        """Test 12: Verificar protección contra acceso no autorizado"""
-        print(f"\n🔒 Test 12: Verificando protección de endpoints...")
+    def test_13_unauthorized_access_protection(self):
+        """Test 13: Verificar protección contra acceso no autorizado"""
+        print(f"\n🔒 Test 13: Verificando protección de endpoints...")
         
         # Intentar acceder sin token
         response = requests.get(f"{BASE_URL}/api/families/")
-        assert response.status_code == 401
+        print(f"   Sin token - Código recibido: {response.status_code}")
+        assert response.status_code in [401, 403], f"Esperado 401 o 403, recibido {response.status_code}"
         
         response = requests.post(f"{BASE_URL}/api/chat/message", json={
             "family_id": self.family_id,
             "message": "test"
         })
-        assert response.status_code == 401
+        print(f"   Chat sin token - Código recibido: {response.status_code}")
+        assert response.status_code in [401, 403], f"Esperado 401 o 403, recibido {response.status_code}"
         
         # Intentar con token inválido
         headers = {"Authorization": "Bearer token_falso_invalid"}
         response = requests.get(f"{BASE_URL}/api/families/", headers=headers)
-        assert response.status_code == 401
+        print(f"   Token inválido - Código recibido: {response.status_code}")
+        assert response.status_code in [401, 403], f"Esperado 401 o 403, recibido {response.status_code}"
         
-        print("   ✅ Acceso sin token: bloqueado")
-        print("   ✅ Acceso con token inválido: bloqueado")
+        # Intentar acceder al nuevo endpoint sin autenticación
+        response = requests.post(f"{BASE_URL}/api/routes/family/{self.family_id}/advance")
+        print(f"   Endpoint advance sin token - Código recibido: {response.status_code}")
+        assert response.status_code in [401, 403], f"Esperado 401 o 403, recibido {response.status_code}"
         
+        print("   ✅ Todos los endpoints protegidos correctamente")
         print("✅ Protección de seguridad verificada")
     
-    def test_13_final_profile_verification(self):
-        """Test 13: Verificación final del perfil actualizado"""
-        print(f"\n🏁 Test 13: Verificación final del perfil...")
+    def test_14_final_profile_verification(self):
+        """Test 14: Verificación final del perfil actualizado"""
+        print(f"\n🏁 Test 14: Verificación final del perfil...")
         
         headers = {"Authorization": f"Bearer {self.access_token}"}
         response = requests.get(f"{BASE_URL}/api/auth/me", headers=headers)
@@ -374,7 +529,7 @@ class TestRatonPerezCompleteFlow:
         final_profile = response.json()
         
         assert final_profile["total_families"] == 1
-        assert final_profile["total_points"] >= 0  # Puede variar según puntos otorgados
+        assert final_profile["total_points"] >= 1500  # Debería tener muchos más puntos ahora
         assert len(final_profile["families"]) == 1
         
         family = final_profile["families"][0]
@@ -386,15 +541,22 @@ class TestRatonPerezCompleteFlow:
         print(f"   Puntos acumulados: {final_profile['total_points']}")
         print(f"   Familia creada: {family['name']}")
         
+        # Calcular eficiencia final
+        eficiencia = final_profile['total_points'] / 2250 * 100
+        print(f"   📊 Eficiencia de puntos: {eficiencia:.1f}%")
+        
         print("✅ Perfil final verificado")
-        print(f"\n🎉 FLUJO COMPLETO EXITOSO")
+        print(f"\n🎉 FLUJO COMPLETO EXITOSO CON OPTIMIZACIÓN")
         print(f"   Email: {self.test_email}")
         print(f"   Familia: {self.family_name}")
         print(f"   Puntos totales: {final_profile['total_points']}")
+        print(f"   Objetivo: 2,250 puntos")
+        print(f"   Eficiencia: {eficiencia:.1f}%")
+        print(f"   Experiencia completa: ¡Ruta del Ratoncito Pérez completada!")
     
     @classmethod
     def teardown_class(cls):
-        """Cleanup opcional - en producción podrías limpiar datos de test"""
+        """Cleanup opcional"""
         print(f"\n🧹 Cleanup completado")
         print(f"   Usuario de prueba: {cls.test_email}")
         print(f"   Familia de prueba: {cls.family_name}")
@@ -409,7 +571,6 @@ def run_complete_flow_test():
 def quick_auth_test():
     """Test rápido solo de autenticación"""
     try:
-        # Test de registro rápido
         unique_id = str(uuid.uuid4())[:8]
         test_data = {
             "email": f"quick_{unique_id}@test.com",

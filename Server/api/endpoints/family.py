@@ -125,8 +125,12 @@ async def list_user_families(
 ):
     """
     Listar todas las familias del usuario autenticado
+    
+    Este endpoint requiere autenticación. Si no hay token válido,
+    get_current_user lanzará HTTPException con código 401.
     """
     try:
+        # Si llegamos aquí, el usuario está correctamente autenticado
         query = """
             SELECT f.id, f.name, f.preferred_language, f.created_at,
                    frp.points_earned,
@@ -149,8 +153,8 @@ async def list_user_families(
         families = db.execute_query(query, (current_user.id,))
         
         # Calcular estadísticas del usuario
-        total_points = sum(family.get("points_earned", 0) or 0 for family in families)
-        total_families = len(families)
+        total_points = sum(family.get("points_earned", 0) or 0 for family in families or [])
+        total_families = len(families or [])
         
         return {
             "families": families or [],
@@ -159,6 +163,9 @@ async def list_user_families(
             "user_id": current_user.id
         }
         
+    except HTTPException:
+        # Re-lanzar excepciones HTTP (como 401 de get_current_user)
+        raise
     except Exception as e:
         logger.error(f"Error obteniendo familias del usuario {current_user.id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

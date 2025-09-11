@@ -1,5 +1,10 @@
 import os
 from typing import Optional
+
+# Fix para problemas de memoria MPS en Mac
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -25,8 +30,8 @@ class LangChainSettings(BaseSettings):
     openai_api_key: Optional[str] = None
 
     # === Configuración del agente ===
-    # ✅ Usamos un modelo Groq más potente que geemma (por ejemplo LLaMA 3 de 70B)
-    agent_model: str = "gemma2-9b-it"  
+    # ✅ Modelo Groq por defecto: openai/gpt-oss-120b (puedes cambiarlo en .env si lo necesitas)
+    agent_model: str = "openai/gpt-oss-120b"
     temperature: float = 0.7
     max_tokens: int = 1500
 

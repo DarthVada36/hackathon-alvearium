@@ -14,8 +14,8 @@ from Server.api.dependencies import get_db
 
 logger = logging.getLogger(__name__)
 
-# Esquema de seguridad Bearer Token
-security = HTTPBearer()
+# Esquema de seguridad Bearer Token con auto_error=True para lanzar 401 automáticamente
+security = HTTPBearer(auto_error=True)
 
 class AuthenticatedUser:
     """Clase para representar un usuario autenticado"""
@@ -31,10 +31,28 @@ async def get_current_user(
     """
     Dependencia para obtener el usuario actual desde el token JWT
     Úsala en endpoints que requieren autenticación
+    
+    IMPORTANTE: Esta función SIEMPRE debe lanzar 401 si no hay token válido
     """
+    
+    # Si llegamos aquí sin credentials, algo está mal con HTTPBearer
+    if not credentials:
+        logger.warning("get_current_user llamado sin credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de acceso requerido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # Extraer token del header Authorization
     token = credentials.credentials
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token de acceso requerido",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
     # Verificar token
     token_data = auth_manager.verify_token(token)
@@ -66,11 +84,16 @@ async def get_current_user(
             avatar=user_data.get("avatar", "icon1")
         )
         
+    except HTTPException:
+        # Re-lanzar HTTPException tal como están (preservar 401)
+        raise
     except Exception as e:
         logger.error(f"Error verificando usuario {user_id}: {e}")
+        # Error de base de datos también debe ser 401 en contexto de auth
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error interno del servidor"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Error de autenticación",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
 async def get_optional_user(
@@ -92,6 +115,9 @@ async def get_optional_user(
 def require_family_ownership(family_id: int, current_user: AuthenticatedUser, db: Database) -> bool:
     """
     Verificar que el usuario actual es propietario de la familia
+    
+    IMPORTANTE: Esta función debe usarse SOLO después de get_current_user
+    Si el usuario no está autenticado, get_current_user ya habrá lanzado 401
     """
     try:
         family_query = "SELECT user_id FROM families WHERE id = %s"
