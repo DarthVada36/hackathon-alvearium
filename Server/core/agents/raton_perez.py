@@ -106,16 +106,7 @@ class RatonPerez:
     async def _analyze_situation(self, message: str, location: Optional[Dict], context: FamilyContext) -> Dict[str, Any]:
         """
         Detecta tipo de situación y determina si es una pregunta sobre lugares
-        OPTIMIZADO: Análisis más eficiente
         """
-        # Primera vez → llegada al primer POI (si está en índice 0 y no hay historial)
-        if context.current_poi_index == 0 and len(context.conversation_history) == 0:
-            return {
-                "type": "poi_arrival",
-                "data": {"poi_id": "plaza_oriente", "poi_name": "Plaza de Oriente", "poi_index": 0},
-                "current_poi_id": "plaza_oriente"
-            }
-
         current_poi_id = context.get_current_poi_id() or "plaza_oriente"
 
         # Verifica si el último mensaje del agente incluía una pregunta
@@ -150,37 +141,6 @@ class RatonPerez:
             "current_poi_id": current_poi_id,
             "data": {"query": message}
         }
-
-    def _generate_poi_question(self, poi_id: str) -> str:
-        """
-        Genera una pregunta sobre el POI usando información dinámica
-        OPTIMIZADO: Usa servicios optimizados cuando están disponibles
-        """
-        try:
-            # Intentar obtener información del POI usando servicios optimizados
-            if self._embedding_available and self._pinecone_available:
-                poi_info = get_location_info(poi_id, "basic_info")
-                
-                # Extraer un dato interesante para hacer pregunta
-                if poi_info and len(poi_info) > 50:
-                    # Tomar la primera oración como base para la pregunta
-                    first_sentence = poi_info.split('.')[0]
-                    if len(first_sentence) > 20:
-                        return f"Por cierto, {first_sentence.lower()}. ¿Qué os parece más interesante de este lugar?"
-            
-            # Preguntas genéricas por POI como fallback
-            poi_questions = {
-                "plaza_oriente": "¿Sabíais que esta plaza tiene una historia muy especial con el Palacio Real?",
-                "museo_raton_perez": "¿Os emocionáis de estar en mi casa oficial? ¿Qué os gustaría saber?",
-                "plaza_mayor": "¿Habéis visto alguna vez una plaza tan perfectamente rectangular?",
-                "palacio_real": "¿Creéis que los reyes también perdían dientes de pequeños?",
-            }
-            
-            return poi_questions.get(poi_id, "¿Qué os parece este lugar mágico?")
-            
-        except Exception as e:
-            logger.error(f"❌ Error generando pregunta para {poi_id}: {e}")
-            return "¿Qué os parece este lugar tan especial?"
 
     async def _generate_contextual_response(self, context: FamilyContext, message: str,
                                             situation: Dict[str, Any],
@@ -227,7 +187,6 @@ Usa la información proporcionada para dar respuestas educativas y entretenidas.
     async def _build_situation_context(self, situation: Dict[str, Any], message: str, context: FamilyContext) -> str:
         """
         Construye el contexto específico según la situación detectada
-        OPTIMIZADO: Usa servicios optimizados para obtener información
         """
         situation_type = situation["type"]
         
@@ -248,15 +207,10 @@ Usa la información proporcionada para dar respuestas educativas y entretenidas.
             else:
                 poi_info = f"Información sobre {poi_name} - un lugar especial en Madrid."
             
-            question = self._generate_poi_question(poi_id)
-            
             return f"""LLEGADA A: {poi_name}
 
 INFORMACIÓN DEL LUGAR:
-{poi_info}
-
-PREGUNTA PARA LA FAMILIA:
-{question}"""
+{poi_info}"""
 
         elif situation_type in ["location_question", "poi_question"]:
             # Pregunta sobre lugares
@@ -283,17 +237,11 @@ PREGUNTA PARA LA FAMILIA:
                 except Exception as e:
                     logger.warning(f"⚠️ Error obteniendo info del POI actual: {e}")
             
-            # Generar pregunta de seguimiento
-            follow_up_question = self._generate_poi_question(current_poi_id) if current_poi_id else ""
-            
             return f"""PREGUNTA SOBRE MADRID: {query}
 
 INFORMACIÓN RELEVANTE:
 {search_results}
-{current_poi_info}
-
-PREGUNTA DE SEGUIMIENTO:
-{follow_up_question}"""
+{current_poi_info}"""
 
         elif situation_type == "general_conversation":
             # Conversación general
@@ -308,7 +256,7 @@ Estamos en: {poi_summary.get('name', 'un lugar especial')}
 {poi_summary.get('basic_info', '')[:200]}...
 
 PREGUNTA PARA MANTENER EL INTERÉS:
-{self._generate_poi_question(current_poi_id)}"""
+¿Hay algo especial de Madrid que os gustaría conocer?"""
                 except Exception as e:
                     logger.warning(f"⚠️ Error obteniendo resumen del POI: {e}")
                     

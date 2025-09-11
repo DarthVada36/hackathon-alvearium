@@ -1,6 +1,6 @@
 """
 Points System - Sistema de puntos y gamificación
-Lógica clara: 100 llegada + 50 engagement + 75 pregunta = 225 máx. por POI
+Lógica clara: 100 llegada + 75 engagement + 5 indefinido por cualquier interaccion extra por Poi
 """
 
 from typing import Dict, Any
@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 # Configuración de puntos
 POINTS_CONFIG = {
     "arrival": 100,     # Por llegar la primera vez a un POI
-    "engagement": 50,   # Por mostrar interés en un POI
-    "question": 75      # Por responder una pregunta del agente
+    "engagement": 75    # Por mostrar interés en un POI
 }
 
 def evaluate_points(context: FamilyContext, message: str, situation: Dict[str, Any]) -> Dict[str, Any]:
@@ -31,22 +30,13 @@ def evaluate_points(context: FamilyContext, message: str, situation: Dict[str, A
     current_poi_id = situation.get("current_poi_id")
 
     # 2️⃣ Engagement en el POI
-    if current_poi_id and situation["type"] == "location_question":
+    if current_poi_id and situation["type"] in ["location_question", "poi_question", "general_conversation"]:
         if not context.has_earned_poi_points(current_poi_id, "engagement"):
             context.mark_poi_points_earned(current_poi_id, "engagement")
             result["points_earned"] += POINTS_CONFIG["engagement"]
             result["achievements"].append("poi_engagement")
             result["messages"].append("¡Me encanta vuestra curiosidad sobre este lugar!")
             logger.info(f"🎯 Otorgados {POINTS_CONFIG['engagement']} puntos por engagement en {current_poi_id}")
-
-    # 3️⃣ Responder pregunta del agente (cualquier respuesta vale)
-    if current_poi_id and situation["type"] == "poi_question":
-        if not context.has_earned_poi_points(current_poi_id, "question"):
-            context.mark_poi_points_earned(current_poi_id, "question")
-            result["points_earned"] += POINTS_CONFIG["question"]
-            result["achievements"].append("poi_question_answered")
-            result["messages"].append("¡Excelente respuesta! 🐭✨")
-            logger.info(f"🎯 Otorgados {POINTS_CONFIG['question']} puntos por responder pregunta en {current_poi_id}")
 
     logger.info(f"📊 Total puntos otorgados: {result['points_earned']}")
     return result

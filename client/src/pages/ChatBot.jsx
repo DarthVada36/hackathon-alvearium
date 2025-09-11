@@ -8,10 +8,7 @@ import {
   FiTarget, 
   FiMapPin, 
   FiClock, 
-  FiHelpCircle,
-  FiChevronRight,
   FiRefreshCw,
-  FiArrowRight,
   FiStar,
   FiUsers,
   FiAlertCircle,
@@ -360,15 +357,6 @@ const ChatBot = () => {
     }
   };
 
-  const quickQuestions = [
-    "¿Dónde está la Casa del Ratoncito Pérez?",
-    "Cuéntame sobre la Puerta del Sol",
-    "¿Qué lugares puedo visitar cerca?",
-    "Historia de Madrid",
-    "¿Cómo llego a Plaza Mayor?",
-    "Restaurantes típicos madrileños"
-  ];
-
   // Si está cargando familias
   if (isLoadingFamilies) {
     return (
@@ -446,7 +434,7 @@ const ChatBot = () => {
               <div>
                 <h3 className="font-bold text-gray-800">{selectedFamily.name}</h3>
                 <p className="text-sm text-gray-600">
-                  {familyStatus.visited_pois}/{familyStatus.total_pois} lugares visitados
+                  {Math.min(familyStatus.current_poi_index + 1, POIS_LIST.length)}/{POIS_LIST.length} lugares visitados
                 </p>
               </div>
               <div className="flex items-center space-x-3">
@@ -467,15 +455,15 @@ const ChatBot = () => {
             <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
               <div 
                 className="bg-gradient-to-r from-amber-400 to-amber-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${familyStatus.progress_percentage}%` }}
+                style={{ width: `${familyStatus.current_poi_index >= POIS_LIST.length ? 100 : ((familyStatus.current_poi_index + 1) / POIS_LIST.length) * 100}%` }}
               />
             </div>
 
-            {/* Botón Siguiente POI */}
+            {/* Botón Próximo Destino */}
             <div className="flex justify-center">
               <button
                 onClick={handleAdvanceToNextPOI}
-                disabled={isAdvancing || familyStatus.progress_percentage >= 100}
+                disabled={isAdvancing || familyStatus.current_poi_index >= POIS_LIST.length}
                 className="flex items-center space-x-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-4 py-2 rounded-xl font-medium hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isAdvancing ? (
@@ -483,15 +471,15 @@ const ChatBot = () => {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     <span>Avanzando...</span>
                   </>
-                ) : familyStatus.progress_percentage >= 100 ? (
+                ) : familyStatus.current_poi_index >= POIS_LIST.length ? (
                   <>
                     <FiCheckCircle size={16} />
                     <span>¡Ruta Completada!</span>
                   </>
                 ) : (
                   <>
-                    <FiArrowRight size={16} />
-                    <span>Siguiente POI</span>
+                    <FiMapPin size={16} />
+                    <span>Próximo destino: {POIS_LIST[familyStatus.current_poi_index + 1]?.name}</span>
                   </>
                 )}
               </button>
@@ -622,27 +610,6 @@ const ChatBot = () => {
               )}
               <div ref={messagesEndRef} />
             </div>
-
-            {/* Quick Questions */}
-            {messages.filter(msg => !msg.isHidden).length <= 2 && !isLoadingHistory && !isGeneratingGreeting && (
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-3 flex items-center">
-                  <FiHelpCircle className="mr-2" />
-                  Preguntas frecuentes:
-                </p>
-                <div className="grid grid-cols-1 gap-2">
-                  {quickQuestions.map((question, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setNewMessage(question)}
-                      className="text-left p-3 bg-white/70 border border-lime-200 rounded-lg text-sm text-gray-700 hover:bg-lime-200/30 transition-colors"
-                    >
-                      {question}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Message Input */}
             <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-lime-200/30 p-3">
