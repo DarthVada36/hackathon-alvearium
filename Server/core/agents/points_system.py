@@ -1,18 +1,14 @@
 """
 Points System - Sistema de puntos y gamificación
-Lógica clara: 100 llegada + 75 engagement + 5 indefinido por cualquier interaccion extra por Poi
+Lógica: 100 puntos por llegada + 75 puntos por engagement (solo una vez por POI)
 """
-
 from typing import Dict, Any
 from Server.core.agents.family_context import FamilyContext
-import logging
-
-logger = logging.getLogger(__name__)
 
 # Configuración de puntos
 POINTS_CONFIG = {
-    "arrival": 100,     # Por llegar la primera vez a un POI
-    "engagement": 75    # Por mostrar interés en un POI
+    "arrival": 100,    # Por llegar la primera vez a un POI
+    "engagement": 75   # Por mostrar interés en un POI (solo primera vez)
 }
 
 def evaluate_points(context: FamilyContext, message: str, situation: Dict[str, Any]) -> Dict[str, Any]:
@@ -20,56 +16,58 @@ def evaluate_points(context: FamilyContext, message: str, situation: Dict[str, A
     Evalúa y otorga puntos según la situación detectada.
     """
     result = {"points_earned": 0, "achievements": [], "messages": []}
-
-    logger.info(f"🔍 Evaluando puntos - Situación: {situation['type']}, POI actual: {situation.get('current_poi_id')}")
-
-    # 1️⃣ Puntos por llegada
+    
+    # Puntos por llegada
     if situation["type"] == "poi_arrival":
-        return _evaluate_arrival_points(context, situation)
-
+        return evaluate_arrival_points(context, situation)
+    
     current_poi_id = situation.get("current_poi_id")
-
-    # 2️⃣ Engagement en el POI
+    
+    # Engagement en el POI (solo primera interacción real del usuario)
     if current_poi_id and situation["type"] in ["location_question", "poi_question", "general_conversation"]:
         if not context.has_earned_poi_points(current_poi_id, "engagement"):
-            context.mark_poi_points_earned(current_poi_id, "engagement")
-            result["points_earned"] += POINTS_CONFIG["engagement"]
-            result["achievements"].append("poi_engagement")
-            result["messages"].append("¡Me encanta vuestra curiosidad sobre este lugar!")
-            logger.info(f"🎯 Otorgados {POINTS_CONFIG['engagement']} puntos por engagement en {current_poi_id}")
-
-    logger.info(f"📊 Total puntos otorgados: {result['points_earned']}")
+            # Verificar que NO es un mensaje automático del sistema
+            if not is_system_generated_message(message, situation):
+                context.mark_poi_points_earned(current_poi_id, "engagement")
+                result["points_earned"] += POINTS_CONFIG["engagement"]
+                result["achievements"].append("poi_engagement")
+    
     return result
 
-def _evaluate_arrival_points(context: FamilyContext, situation: Dict[str, Any]) -> Dict[str, Any]:
+def evaluate_arrival_points(context: FamilyContext, situation: Dict[str, Any]) -> Dict[str, Any]:
     """Evalúa puntos por llegar a un POI (primera vez)."""
     poi_id = situation["data"].get("poi_id", "")
     poi_name = situation["data"].get("poi_name", "")
-
+    
     if context.has_earned_poi_points(poi_id, "arrival"):
-        logger.info(f"ℹ️ Ya se otorgaron puntos de llegada en {poi_id}")
         return {"points_earned": 0, "achievements": [], "messages": []}
-
+    
     context.mark_poi_points_earned(poi_id, "arrival")
-
     return {
         "points_earned": POINTS_CONFIG["arrival"],
         "achievements": ["location_visit"],
-        "messages": [f"¡Habéis llegado a {poi_name}! +{POINTS_CONFIG['arrival']} puntos mágicos 🐭✨"]
+        "messages": []
     }
 
-def get_celebration_message(points_result: Dict[str, Any], language: str = "es") -> str:
-    """Genera un mensaje de celebración."""
-    points = points_result.get("points_earned", 0)
-    messages = points_result.get("messages", [])
-
-    if points == 0 and not messages:
-        return ""
-
-    parts = []
-    if messages:
-        parts.extend(messages)
-    if points > 0:
-        parts.append(f"✨ ¡+{points} puntos mágicos! ✨" if language == "es" else f"✨ +{points} magical points! ✨")
-
-    return "\n".join(parts)
+def is_system_generated_message(message: str, situation: Dict[str, Any]) -> bool:
+    """
+    Detecta si un mensaje es generado automáticamente por el sistema
+    y no debería otorgar puntos de engagement.
+    """
+    system_indicators = [
+        "bienvenid", "hola familia", "me alegra", "comenzamos",
+        "estamos en", "sistema", "automático"
+    ]
+    
+    message_lower = message.lower()
+    
+    # Si el mensaje contiene indicadores de sistema
+    for indicator in system_indicators:
+        if indicator in message_lower:
+            return True
+    
+    # Si el mensaje es muy corto y genérico
+    if len(message.strip()) < 10 and any(word in message_lower for word in ["hola", "hi", "inicio"]):
+        return True
+    
+    return False

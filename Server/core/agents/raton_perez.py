@@ -19,10 +19,7 @@ from Server.core.agents.family_context import (
     load_family_context,
     save_family_context
 )
-from Server.core.agents.points_system import (
-    evaluate_points,
-    get_celebration_message
-)
+from Server.core.agents.points_system import evaluate_points
 from Server.core.agents.madrid_knowledge import (
     get_location_info,
     search_madrid_content,
@@ -69,11 +66,6 @@ class RatonPerez:
 
             # Evaluar puntos según la situación detectada
             points_result = evaluate_points(family_context, message, situation)
-
-            # Fallback para engagement básico
-            if situation["type"] in ["location_question", "poi_question"] and points_result.get("points_earned", 0) == 0:
-                points_result["points_earned"] = 5
-                points_result.setdefault("achievements", []).append("Engagement con el lugar")
 
             # Generar respuesta del agente usando búsquedas vectoriales optimizadas
             response = await self._generate_contextual_response(
@@ -148,23 +140,15 @@ class RatonPerez:
         
         # Construir el prompt base
         base_prompt = self._build_family_prompt(context)
-        
-        # Preparar celebración de puntos
-        celebration = ""
-        if points_result.get("points_earned", 0) > 0:
-            c = get_celebration_message(points_result, context.language)
-            if c:
-                celebration = f"\n\nCELEBRACIÓN DE PUNTOS:\n{c}"
 
         # Preparar contexto específico según situación (optimizado)
         situation_context = await self._build_situation_context(situation, message, context)
 
-        # Prompt completo
+        # Prompt completo (sin celebración de puntos)
         prompt = f"""{base_prompt}
 
 SITUACIÓN ACTUAL:
 {situation_context}
-{celebration}
 
 Responde como el Ratoncito Pérez, mágico y amigable, adaptado a la familia.
 Usa la información proporcionada para dar respuestas educativas y entretenidas."""
