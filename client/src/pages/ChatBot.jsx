@@ -14,6 +14,7 @@ import {
   FiAlertCircle,
   FiCheckCircle
 } from 'react-icons/fi';
+import bg from '../assets/img/bg.png';
 
 const ChatBot = () => {
   const { user } = useAuth();
@@ -360,12 +361,18 @@ const ChatBot = () => {
   // Si está cargando familias
   if (isLoadingFamilies) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-amber-100 pb-20">
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50">
         <Header title="Ratoncito Pérez" showBackButton />
-        <div className="container mx-auto px-4 py-4 flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600 mx-auto mb-4"></div>
-            <p className="text-amber-600 font-medium">Cargando familias...</p>
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center h-64">
+          <div className="text-center bg-white/70 backdrop-blur-sm rounded-3xl p-8 shadow-lg border border-yellow-200/50">
+            <div className="relative">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-yellow-200 border-t-yellow-500 mx-auto mb-4"></div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-2xl">🐭</span>
+              </div>
+            </div>
+            <p className="text-yellow-700 font-medium text-lg">Preparando la aventura...</p>
+            <p className="text-yellow-600 text-sm mt-2">Cargando familias</p>
           </div>
         </div>
         <Navigation />
@@ -376,20 +383,25 @@ const ChatBot = () => {
   // Si no hay familias
   if (families.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-amber-100 pb-20">
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 pb-20">
         <Header title="Ratoncito Pérez" showBackButton />
         <div className="container mx-auto px-4 py-8">
-          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-amber-100">
-            <div className="text-6xl mb-4">🐭</div>
-            <h2 className="text-xl font-bold text-gray-800 mb-4">No tienes familias creadas</h2>
-            <p className="text-gray-600 mb-6">
-              Para chatear conmigo, primero necesitas crear una familia desde tu perfil.
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-12 text-center shadow-xl border border-yellow-200/50 max-w-md mx-auto">
+            <div className="relative mb-6">
+              <div className="text-8xl mb-4 animate-bounce">🐭</div>
+              <div className="absolute -top-2 -right-2 text-3xl animate-pulse">✨</div>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-4 bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent">
+              ¡Hola pequeño explorador!
+            </h2>
+            <p className="text-gray-600 mb-8 leading-relaxed">
+              Para comenzar nuestra aventura mágica por Madrid, primero necesitas crear una familia desde tu perfil.
             </p>
             <button 
               onClick={() => window.history.back()}
-              className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-6 py-3 rounded-xl font-medium hover:from-amber-600 hover:to-amber-700 transition-colors"
+              className="bg-gradient-to-r from-yellow-500 via-amber-500 to-orange-500 text-white px-8 py-4 rounded-2xl font-bold hover:from-yellow-600 hover:via-amber-600 hover:to-orange-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-1"
             >
-              Volver al Dashboard
+              Crear Mi Familia
             </button>
           </div>
         </div>
@@ -399,14 +411,15 @@ const ChatBot = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-amber-100 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 pb-20">
       <Header title="Ratoncito Pérez" showBackButton />
       
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto max-w-4xl">
         {/* Selector de Familia */}
         {families.length > 1 && (
-          <div className="bg-white rounded-2xl p-4 mb-4 shadow-sm border border-amber-100">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-6 mb-6 shadow-lg border border-yellow-200/50">
+            <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center">
+              <FiUsers className="mr-2 text-yellow-600" />
               Selecciona tu familia:
             </label>
             <select
@@ -415,12 +428,12 @@ const ChatBot = () => {
                 const family = families.find(f => f.id === parseInt(e.target.value));
                 setSelectedFamily(family);
               }}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full px-6 py-4 border-2 border-yellow-200 rounded-2xl focus:ring-4 focus:ring-yellow-300/50 focus:border-yellow-400 bg-white/80 backdrop-blur-sm transition-all duration-300 font-medium"
             >
-              <option value="">Selecciona una familia...</option>
+              <option value="">✨ Selecciona una familia...</option>
               {families.map((family) => (
                 <option key={family.id} value={family.id}>
-                  {family.name} ({family.member_count} miembros)
+                  👨‍👩‍👧‍👦 {family.name} ({family.member_count} miembros)
                 </option>
               ))}
             </select>
@@ -429,99 +442,130 @@ const ChatBot = () => {
 
         {/* Información de la Familia y Progreso */}
         {selectedFamily && familyStatus && (
-          <div className="bg-white rounded-2xl p-4 mb-4 shadow-sm border border-amber-100">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="font-bold text-gray-800">{selectedFamily.name}</h3>
-                <p className="text-sm text-gray-600">
-                  {Math.min(familyStatus.current_poi_index + 1, POIS_LIST.length)}/{POIS_LIST.length} lugares visitados
-                </p>
-              </div>
+          <div className="bg-gradient-to-r from-white/95 to-yellow-50/95 backdrop-blur-sm rounded-3xl p-6 mb-6 shadow-lg border border-yellow-200/50">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-1 text-amber-600">
-                  <FiStar size={16} />
-                  <span className="font-bold">{familyStatus.total_points}</span>
+                <div className="w-12 h-12 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                  👑
+                </div>
+                <div>
+                  <h3 className="font-bold text-xl text-gray-800">{selectedFamily.name}</h3>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <FiMapPin className="mr-1" size={14} />
+                    {Math.min(familyStatus.current_poi_index + 1, POIS_LIST.length)}/{POIS_LIST.length} lugares mágicos visitados
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2 bg-gradient-to-r from-yellow-100 to-amber-100 px-4 py-2 rounded-2xl border border-yellow-300/50">
+                  <FiStar className="text-yellow-600" size={18} />
+                  <span className="font-bold text-xl text-yellow-700">{familyStatus.total_points}</span>
+                  <span className="text-xs text-yellow-600 font-medium">pts</span>
                 </div>
                 <button
                   onClick={loadFamilyStatus}
-                  className="p-2 text-gray-400 hover:text-amber-600 transition-colors"
+                  className="p-3 text-gray-400 hover:text-yellow-600 transition-all duration-300 hover:bg-yellow-100 rounded-xl"
                 >
-                  <FiRefreshCw size={16} />
+                  <FiRefreshCw size={18} />
                 </button>
               </div>
             </div>
             
-            {/* Barra de progreso */}
-            <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
-              <div 
-                className="bg-gradient-to-r from-amber-400 to-amber-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${familyStatus.current_poi_index >= POIS_LIST.length ? 100 : ((familyStatus.current_poi_index + 1) / POIS_LIST.length) * 100}%` }}
-              />
+            {/* Barra de progreso mejorada */}
+            <div className="mb-6">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-gray-600">Progreso de la aventura</span>
+                <span className="text-sm font-bold text-yellow-600">
+                  {Math.round(familyStatus.current_poi_index >= POIS_LIST.length ? 100 : ((familyStatus.current_poi_index + 1) / POIS_LIST.length) * 100)}%
+                </span>
+              </div>
+              <div className="w-full bg-gradient-to-r from-gray-200 to-gray-300 rounded-full h-3 shadow-inner">
+                <div 
+                  className="bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 h-3 rounded-full transition-all duration-700 shadow-lg relative overflow-hidden"
+                  style={{ width: `${familyStatus.current_poi_index >= POIS_LIST.length ? 100 : ((familyStatus.current_poi_index + 1) / POIS_LIST.length) * 100}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent animate-pulse"></div>
+                </div>
+              </div>
             </div>
 
-           {/* Botón Próximo Destino / Fin de Ruta */}
-          <div className="flex justify-center">
-            <button
-              onClick={handleAdvanceToNextPOI}
-              disabled={isAdvancing || familyStatus.current_poi_index >= POIS_LIST.length}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl font-medium transition-colors ${
-                familyStatus.current_poi_index >= POIS_LIST.length
-                  ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white cursor-not-allowed'
-                  : familyStatus.current_poi_index === POIS_LIST.length - 1
-                  ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'
-                  : 'bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-600 hover:to-green-700'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {isAdvancing ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Avanzando...</span>
-                </>
-              ) : familyStatus.current_poi_index >= POIS_LIST.length ? (
-                // 🎉 RUTA COMPLETADA - BOTÓN BLOQUEADO
-                <>
-                  <FiCheckCircle size={16} />
-                  <span>¡Ruta Completada!</span>
-                </>
-              ) : familyStatus.current_poi_index === POIS_LIST.length - 1 ? (
-                // 🏁 ÚLTIMO POI - BOTÓN PARA FINALIZAR
-                <>
-                  <FiTarget size={16} />
-                  <span>Finalizar Ruta</span>
-                </>
-              ) : (
-                // 🗺️ POI INTERMEDIO - MOSTRAR SIGUIENTE DESTINO
-                <>
-                  <FiMapPin size={16} />
-                  <span>Próximo: {POIS_LIST[familyStatus.current_poi_index + 1]?.name}</span>
-                </>
-              )}
-            </button>
-          </div>
+            {/* Botón Próximo Destino mejorado */}
+            <div className="flex justify-center">
+              <button
+                onClick={handleAdvanceToNextPOI}
+                disabled={isAdvancing || familyStatus.current_poi_index >= POIS_LIST.length}
+                className={`group relative flex items-center space-x-3 px-8 py-4 rounded-2xl font-bold transition-all duration-300 transform ${
+                  familyStatus.current_poi_index >= POIS_LIST.length
+                    ? 'bg-gradient-to-r from-gray-400 to-gray-500 text-white cursor-not-allowed shadow-lg'
+                    : familyStatus.current_poi_index === POIS_LIST.length - 1
+                    ? 'bg-gradient-to-r from-purple-500 via-purple-600 to-pink-600 text-white hover:from-purple-600 hover:via-purple-700 hover:to-pink-700 shadow-lg hover:shadow-xl hover:-translate-y-1'
+                    : 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white hover:from-green-600 hover:via-emerald-600 hover:to-teal-600 shadow-lg hover:shadow-xl hover:-translate-y-1'
+                } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
+              >
+                {isAdvancing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    <span>Avanzando...</span>
+                  </>
+                ) : familyStatus.current_poi_index >= POIS_LIST.length ? (
+                  <>
+                    <FiCheckCircle size={20} />
+                    <span>¡Aventura Completada!</span>
+                    <div className="absolute -top-1 -right-1 text-lg animate-bounce">🎉</div>
+                  </>
+                ) : familyStatus.current_poi_index === POIS_LIST.length - 1 ? (
+                  <>
+                    <FiTarget size={20} />
+                    <span>¡Finalizar Aventura!</span>
+                    <div className="absolute -top-1 -right-1 text-lg animate-pulse">🏁</div>
+                  </>
+                ) : (
+                  <>
+                    <FiMapPin size={20} />
+                    <span>Siguiente: {POIS_LIST[familyStatus.current_poi_index + 1]?.name}</span>
+                    <div className="absolute -top-1 -right-1 text-lg animate-bounce">✨</div>
+                  </>
+                )}
+                {!isAdvancing && familyStatus.current_poi_index < POIS_LIST.length && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-2xl"></div>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Error Display */}
+        {/* Error Display mejorado */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
+          <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 text-red-700 px-6 py-4 rounded-2xl mb-6 shadow-lg">
             <div className="flex items-center">
-              <FiAlertCircle className="mr-2" size={16} />
-              <span className="text-sm">{error}</span>
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <FiAlertCircle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h4 className="font-bold text-red-800">¡Ups! Algo salió mal</h4>
+                <span className="text-sm">{error}</span>
+              </div>
             </div>
           </div>
         )}
 
         {selectedFamily ? (
-          <div className="h-[calc(100vh-340px)] flex flex-col">
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-yellow-200/50 overflow-hidden">
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+            <div className="h-[calc(100vh-420px)] overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-transparent to-yellow-50/20">
               {isLoadingHistory || isGeneratingGreeting ? (
-                <div className="flex justify-center py-8">
-                  <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto mb-2"></div>
-                    <p className="text-amber-600 text-sm">
-                      {isGeneratingGreeting ? 'El Ratoncito Pérez os está preparando un saludo...' : 'Cargando conversación...'}
+                <div className="flex justify-center py-12">
+                  <div className="text-center bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-lg border border-yellow-200/50">
+                    <div className="relative mb-4">
+                      <div className="animate-spin rounded-full h-12 w-12 border-3 border-yellow-200 border-t-yellow-500 mx-auto"></div>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xl">🐭</span>
+                      </div>
+                    </div>
+                    <p className="text-yellow-700 font-bold text-lg">
+                      {isGeneratingGreeting ? '✨ Preparando un saludo especial...' : '📚 Cargando vuestra historia...'}
                     </p>
+                    <p className="text-yellow-600 text-sm mt-2">Un momento, por favor</p>
                   </div>
                 </div>
               ) : (
@@ -530,32 +574,52 @@ const ChatBot = () => {
                     key={message.id}
                     className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className={`max-w-[80%] ${
+                    <div className={`max-w-[85%] relative group ${
                       message.sender === 'user' 
-                        ? 'bg-amber-600 text-white' 
+                        ? 'bg-gradient-to-r from-yellow-500 via-amber-500 to-orange-500 text-white shadow-lg' 
                         : message.isError 
-                        ? 'bg-red-50 border border-red-200 text-red-700'
+                        ? 'bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 text-red-700 shadow-lg'
                         : message.isAdvance
-                        ? 'bg-green-50 border border-green-200 text-green-700'
+                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 text-green-700 shadow-lg'
                         : message.isCompletion
-                        ? 'bg-purple-50 border border-purple-200 text-purple-700'
+                        ? 'bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 text-purple-700 shadow-lg'
                         : message.isWelcome
-                        ? 'bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-gray-800'
-                        : 'bg-white border border-lime-200'
-                    } rounded-2xl p-4 shadow-sm`}>
+                        ? 'bg-gradient-to-r from-yellow-50 via-amber-50 to-orange-50 border-2 border-yellow-300 text-gray-800 shadow-lg'
+                        : 'bg-white/95 backdrop-blur-sm border-2 border-yellow-200 text-gray-800 shadow-lg'
+                    } rounded-3xl p-6 transition-all duration-300 hover:shadow-xl`}>
+                      
+                      {/* Avatar y header del bot */}
                       {message.sender === 'bot' && !message.isError && (
-                        <div className="flex items-center space-x-2 mb-2">
-                          <FiTarget className="text-amber-600" size={16} />
-                          <span className="text-xs font-medium text-amber-600">
-                            Ratoncito Pérez
-                            {message.isWelcome && message.currentPoi && (
-                              <span className="ml-2 text-blue-600">📍 {message.currentPoi.name}</span>
-                            )}
-                          </span>
+                        <div className="flex items-center space-x-3 mb-4">
+                          <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg">
+                            🐭
+                          </div>
+                          <div>
+                            <span className="text-sm font-bold text-yellow-600 flex items-center">
+                              <FiTarget className="mr-1" size={14} />
+                              Ratoncito Pérez
+                              {message.isWelcome && message.currentPoi && (
+                                <span className="ml-3 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium border border-blue-200">
+                                  📍 {message.currentPoi.name}
+                                </span>
+                              )}
+                            </span>
+                          </div>
                         </div>
                       )}
                       
-                      <p className={`text-sm ${
+                      {/* Avatar del usuario */}
+                      {message.sender === 'user' && (
+                        <div className="flex items-center justify-end space-x-2 mb-3">
+                          <span className="text-xs font-medium text-white/80">Tú</span>
+                          <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
+                            👤
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Contenido del mensaje */}
+                      <div className={`text-sm leading-relaxed ${
                         message.sender === 'user' ? 'text-white' : 
                         message.isError ? 'text-red-700' :
                         message.isAdvance ? 'text-green-700' :
@@ -563,16 +627,22 @@ const ChatBot = () => {
                         'text-gray-800'
                       }`}>
                         {message.text}
-                      </p>
+                      </div>
                       
                       {/* Información adicional para mensajes de avance */}
                       {message.advanceData && (
-                        <div className="mt-3 p-3 bg-green-100 rounded-lg">
+                        <div className="mt-4 p-4 bg-gradient-to-r from-green-100 to-emerald-100 rounded-2xl border border-green-200 shadow-inner">
                           <div className="text-sm">
-                            <div className="font-semibold">📍 {message.advanceData.poi?.name}</div>
-                            <div className="flex items-center justify-between mt-2">
-                              <span>Progreso: {message.advanceData.progress}</span>
-                              <span className="font-bold">+{message.advanceData.points_earned} pts</span>
+                            <div className="font-bold text-green-800 text-base mb-2 flex items-center">
+                              <FiMapPin className="mr-2" size={16} />
+                              📍 {message.advanceData.poi?.name}
+                            </div>
+                            <div className="flex items-center justify-between bg-white/50 rounded-xl p-3">
+                              <span className="text-green-700 font-medium">Progreso: {message.advanceData.progress}</span>
+                              <div className="flex items-center space-x-1 bg-gradient-to-r from-yellow-400 to-amber-500 text-white px-3 py-1 rounded-full font-bold shadow-lg">
+                                <FiStar size={14} />
+                                <span>+{message.advanceData.points_earned}</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -580,44 +650,59 @@ const ChatBot = () => {
 
                       {/* Puntos ganados */}
                       {message.points_earned > 0 && (
-                        <div className="mt-2 flex items-center space-x-1">
-                          <FiStar className="text-yellow-500" size={14} />
-                          <span className="text-xs font-medium text-yellow-600">
-                            +{message.points_earned} puntos
-                          </span>
+                        <div className="mt-3 flex justify-end">
+                          <div className="flex items-center space-x-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-white px-4 py-2 rounded-full font-bold shadow-lg text-sm">
+                            <FiStar size={14} />
+                            <span>+{message.points_earned} puntos mágicos</span>
+                          </div>
                         </div>
                       )}
 
-                      <div className="flex items-center justify-end space-x-1 mt-2">
+                      {/* Timestamp */}
+                      <div className="flex items-center justify-end space-x-2 mt-4 pt-2 border-t border-gray-200/50">
                         <FiClock size={12} className={
-                          message.sender === 'user' ? 'text-white/70' : 
-                          message.isError ? 'text-red-500' :
+                          message.sender === 'user' ? 'text-white/60' : 
+                          message.isError ? 'text-red-400' :
                           'text-gray-400'
                         } />
                         <span className={`text-xs ${
-                          message.sender === 'user' ? 'text-white/70' : 
-                          message.isError ? 'text-red-500' :
+                          message.sender === 'user' ? 'text-white/60' : 
+                          message.isError ? 'text-red-400' :
                           'text-gray-400'
                         }`}>
                           {message.timestamp}
                         </span>
                       </div>
+
+                      {/* Efectos especiales para mensajes especiales */}
+                      {message.isWelcome && (
+                        <div className="absolute -top-2 -right-2 text-2xl animate-bounce">✨</div>
+                      )}
+                      {message.isCompletion && (
+                        <div className="absolute -top-2 -right-2 text-2xl animate-pulse">🎉</div>
+                      )}
+                      {message.isAdvance && (
+                        <div className="absolute -top-2 -right-2 text-2xl animate-bounce">🗺️</div>
+                      )}
                     </div>
                   </div>
                 ))
               )}
               
+              {/* Indicador de escritura mejorado */}
               {isTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-white border border-lime-200 rounded-2xl p-4 shadow-sm">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <FiTarget className="text-amber-600" size={16} />
-                      <span className="text-xs font-medium text-amber-600">Ratoncito Pérez</span>
+                  <div className="bg-white/95 backdrop-blur-sm border-2 border-yellow-200 rounded-3xl p-6 shadow-lg max-w-[80%]">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg animate-pulse">
+                        🐭
+                      </div>
+                      <span className="text-sm font-bold text-yellow-600">Ratoncito Pérez está escribiendo...</span>
                     </div>
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                    <div className="flex space-x-2">
+                      <div className="w-3 h-3 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full animate-bounce shadow-lg"></div>
+                      <div className="w-3 h-3 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full animate-bounce shadow-lg" style={{animationDelay: '0.1s'}}></div>
+                      <div className="w-3 h-3 bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full animate-bounce shadow-lg" style={{animationDelay: '0.2s'}}></div>
                     </div>
                   </div>
                 </div>
@@ -625,39 +710,59 @@ const ChatBot = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Message Input */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-lime-200/30 p-3">
-              <div className="flex items-end space-x-3">
-                <div className="flex-1">
+            {/* Message Input mejorado */}
+            <div className="border-t-2 border-yellow-200/50 bg-gradient-to-r from-white/95 to-yellow-50/95 backdrop-blur-sm p-6">
+              <div className="flex items-end space-x-4 bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-yellow-200/50 p-4 shadow-lg">
+                <div className="flex-1 relative">
                   <textarea
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Pregunta sobre Madrid, su historia, lugares que visitar..."
-                    className="w-full resize-none border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-500 text-sm max-h-20"
+                    placeholder="¿Qué quieres saber sobre Madrid? Pregúntame sobre historia, lugares secretos, leyendas..."
+                    className="w-full resize-none border-0 focus:outline-none bg-transparent text-gray-800 placeholder-gray-500 text-sm max-h-32 leading-relaxed font-medium"
                     rows="1"
                     disabled={isSending || isGeneratingGreeting}
                   />
+                  {!newMessage.trim() && !isSending && (
+                    <div className="absolute top-8 left-0 text-xs text-gray-400 flex items-center space-x-1">
+                      <span>💡</span>
+                      <span>Pulsa Enter para enviar</span>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleSendMessage}
                   disabled={!newMessage.trim() || isSending || isGeneratingGreeting}
-                  className="bg-amber-600 text-white p-3 rounded-xl hover:bg-amber-600/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="group bg-gradient-to-r from-yellow-500 via-amber-500 to-orange-500 text-white p-4 rounded-2xl hover:from-yellow-600 hover:via-amber-600 hover:to-orange-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-1 disabled:transform-none"
                 >
                   {isSending ? (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                   ) : (
-                    <FiSend size={18} />
+                    <FiSend size={20} className="group-hover:translate-x-1 transition-transform duration-200" />
                   )}
                 </button>
+              </div>
+              <div className="flex justify-center mt-3">
+                <p className="text-xs text-gray-500 flex items-center space-x-1">
+                  <span>🔒</span>
+                  <span>Conversación segura con el Ratoncito Pérez</span>
+                </p>
               </div>
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-amber-100">
-            <div className="text-4xl mb-4">🐭</div>
-            <h3 className="text-lg font-bold text-gray-800 mb-2">Selecciona una familia</h3>
-            <p className="text-gray-600">Elige una familia para comenzar a chatear conmigo</p>
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-12 text-center shadow-xl border border-yellow-200/50 max-w-md mx-auto">
+            <div className="relative mb-8">
+              <div className="text-6xl mb-4 animate-bounce">🐭</div>
+              <div className="absolute -top-2 -right-2 text-2xl animate-pulse">💭</div>
+              <div className="absolute -bottom-2 -left-2 text-xl animate-bounce delay-200">✨</div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-800 mb-3 bg-gradient-to-r from-yellow-600 to-amber-600 bg-clip-text text-transparent">
+              ¡Elige tu familia aventurera!
+            </h3>
+            <p className="text-gray-600 leading-relaxed">
+              Selecciona una familia de la lista de arriba para comenzar nuestra mágica conversación por Madrid
+            </p>
           </div>
         )}
       </div>
@@ -665,6 +770,7 @@ const ChatBot = () => {
       <Navigation />
     </div>
   );
-};
+}
+
 
 export default ChatBot;

@@ -45,10 +45,10 @@ const Home = () => {
           <div className="coin-3d">
             <div className="coin-inner">
               <div className="coin-front">
-                <Star className="text-yellow-400" size={32} />
+                <Star className="text-yellow-400" size={42} />
               </div>
               <div className="coin-back">
-                <Trophy className="text-yellow-400" size={32} />
+                <Trophy className="text-yellow-400" size={42} />
               </div>
             </div>
           </div>
