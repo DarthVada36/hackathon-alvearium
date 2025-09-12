@@ -30,7 +30,7 @@ from Server.core.agents.madrid_knowledge import (
 )
 from Server.core.agents.location_helper import RATON_PEREZ_ROUTE
 
-# NUEVO: Importar servicios optimizados
+# Importar servicios optimizados
 from Server.core.services.embedding_service import embedding_service
 from Server.core.services.pinecone_service import pinecone_service
 
